@@ -202,7 +202,6 @@ input("Press any key to continue..")
 
 # Training
 def train(epoch):
-    # eps=1e-9
     net.train()
     train_loss = 0.
 
@@ -265,7 +264,6 @@ def train(epoch):
 
 # Valid
 def valid(epoch):
-    # eps = 1e-9
     net.eval()
     valid_loss = 0.
     avg_valid_loss = 0.
