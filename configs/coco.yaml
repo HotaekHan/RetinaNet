@@ -1,0 +1,24 @@
+data:
+  train: data/coco_trainval35k.json
+  valid: data/coco_minival5k.json
+hyperparameters:
+  batch_size: 8
+  optimizer: Adam
+  loss: focal
+  lr: 1e-4
+  epoch: 1000
+  lr_patience: -1
+  lr_multistep: None
+  random_seed: 3000
+  image_size: 512
+  classes: aeroplane|bicycle|bird|boat|bottle|bus|car|cat|chair|cow|diningtable|dog|horse|motorbike|person|pottedplant|sheep|sofa|train|tvmonitor
+  base: Res50
+  pre_base: True
+  num_crops: -1
+model:
+  model_path: None
+  exp_path: expr/pre_ex0
+  is_finetune: False
+cuda:
+  using_cuda: True
+  gpu_id: 0
