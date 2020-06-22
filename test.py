@@ -90,6 +90,12 @@ for dataset_name in dataset_dict:
                                                                     cls_threshold=cls_th,
                                                                     nms_threshold=nms_th)
 
+                # nms mode = 0: soft-nms(liner), 1: soft-nms(gaussian), 2: hard-nms
+                keep = utils.box_nms(boxes, scores, nms_threshold=nms_th, mode=2)
+                boxes = boxes[keep]
+                scores = scores[keep]
+                labels = labels[keep]
+
                 utils._write_results(result_dir, paths[iter_batch], boxes, scores, labels, dataset.class_idx_map,
                                      img_size)
     print()

@@ -2,7 +2,7 @@
 import math
 import torch
 
-from utils import meshgrid, box_iou, box_nms, change_box_order
+from utils import meshgrid, box_iou, change_box_order
 
 
 class DataEncoder:
@@ -102,7 +102,7 @@ class DataEncoder:
 
         return loc_targets, cls_targets
 
-    def decode(self, loc_preds, cls_preds, input_size, cls_threshold, nms_threshold):
+    def decode(self, loc_preds, cls_preds, input_size, cls_threshold, top_k=-1):
         '''Decode outputs back to bouding box locations and class labels.
 
         Args:
@@ -136,8 +136,8 @@ class DataEncoder:
         if ids.numel() == 0:
             return [], [], []
 
-        if ids.numel() > 1000:
-            _, top_ids = torch.topk(scores[ids], k=1000)
+        if top_k > 0 and ids.numel() > top_k:
+            _, top_ids = torch.topk(scores[ids], k=top_k)
         else:
             top_ids = torch.arange(0, ids.numel(), 1, dtype=torch.int64, device=ids.device)
 
@@ -145,6 +145,5 @@ class DataEncoder:
         scores = scores[ids][top_ids]
         labels = labels[ids][top_ids]
 
-        # nms mode = 0: soft-nms(liner), 1: soft-nms(gaussian), 2: hard-nms
-        keep = box_nms(boxes, scores, nms_threshold=nms_threshold, mode=2)
-        return boxes[keep], labels[keep], scores[keep]
+        return boxes, labels, scores
+

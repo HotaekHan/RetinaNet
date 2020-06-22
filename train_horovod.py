@@ -12,6 +12,9 @@ import torchvision.transforms as transforms
 from torch.optim import lr_scheduler
 from torch import autograd
 
+import torch.utils.data.distributed
+import horovod.torch as hvd
+
 # 3rd-party utils
 from torch.utils.tensorboard import SummaryWriter
 
@@ -27,17 +30,23 @@ parser.add_argument('--config', type=str, required=True, help='path of config fi
 opt = parser.parse_args()
 
 config = utils.get_config(opt.config)
-start_epoch = 0  # start from epoch 0 or last epoch
+start_epoch = 1  # start from epoch 0 or last epoch
+fp16 = True
+num_workers = 0
+
+# Horovod: initialize library.
+hvd.init()
 
 # make output folder
-if not os.path.exists(config['model']['exp_path']):
-    os.mkdir(config['model']['exp_path'])
+if hvd.rank() == 0:
+    if not os.path.exists(config['model']['exp_path']):
+        os.mkdir(config['model']['exp_path'])
 
-if not os.path.exists(os.path.join(config['model']['exp_path'], 'config.yaml')):
-    shutil.copy(opt.config, os.path.join(config['model']['exp_path'], 'config.yaml'))
-else:
-    os.remove(os.path.join(config['model']['exp_path'], 'config.yaml'))
-    shutil.copy(opt.config, os.path.join(config['model']['exp_path'], 'config.yaml'))
+    if not os.path.exists(os.path.join(config['model']['exp_path'], 'config.yaml')):
+        shutil.copy(opt.config, os.path.join(config['model']['exp_path'], 'config.yaml'))
+    else:
+        os.remove(os.path.join(config['model']['exp_path'], 'config.yaml'))
+        shutil.copy(opt.config, os.path.join(config['model']['exp_path'], 'config.yaml'))
 
 # set random seed
 random.seed(config['hyperparameters']['random_seed'])
@@ -54,19 +63,23 @@ global_iter_valid = 0
 if torch.cuda.is_available() and not config['cuda']['using_cuda']:
     print("WARNING: You have a CUDA device, so you should probably run with using cuda")
 
-is_data_parallel = False
-if isinstance(config['cuda']['gpu_id'], list):
-    is_data_parallel = True
-    cuda_str = 'cuda:' + str(config['cuda']['gpu_id'][0])
-elif isinstance(config['cuda']['gpu_id'], int):
+if isinstance(config['cuda']['gpu_id'], int):
     cuda_str = 'cuda:' + str(config['cuda']['gpu_id'])
 else:
     raise ValueError('Check out gpu id in config')
 
 device = torch.device(cuda_str if config['cuda']['using_cuda'] else "cpu")
+if config['cuda']['using_cuda']:
+    # Horovod: pin GPU to local rank.
+    torch.cuda.set_device(hvd.local_rank())
+    torch.cuda.manual_seed(config['hyperparameters']['random_seed'])
+
+# Horovod: limit # of CPU threads to be used per worker.
+# torch.set_num_threads(num_workers)
 
 # tensorboard
-summary_writer = SummaryWriter(os.path.join(config['model']['exp_path'], 'log'))
+if hvd.rank() == 0:
+    summary_writer = SummaryWriter(os.path.join(config['model']['exp_path'], 'log'))
 
 # Data
 print('==> Preparing data..')
@@ -102,25 +115,38 @@ if config['data']['add_train'] is not None:
     assert add_train_dataset
     assert concat_train_dataset
 
+    # Horovod: use DistributedSampler to partition the training data.
+    train_sampler = torch.utils.data.distributed.DistributedSampler(
+        concat_train_dataset, num_replicas=hvd.size(), rank=hvd.rank())
+
     train_loader = torch.utils.data.DataLoader(
         concat_train_dataset, batch_size=config['hyperparameters']['batch_size'],
-        shuffle=True, num_workers=config['hyperparameters']['data_worker'],
+        num_workers=num_workers,
         collate_fn=train_dataset.collate_fn,
-        pin_memory=True)
+        pin_memory=True,
+        sampler=train_sampler)
 else:
+    # Horovod: use DistributedSampler to partition the training data.
+    train_sampler = torch.utils.data.distributed.DistributedSampler(
+        train_dataset, num_replicas=hvd.size(), rank=hvd.rank())
+
     train_loader = torch.utils.data.DataLoader(
         train_dataset, batch_size=config['hyperparameters']['batch_size'],
-        shuffle=True, num_workers=config['hyperparameters']['data_worker'],
+        num_workers=num_workers,
         collate_fn=train_dataset.collate_fn,
-        pin_memory=True)
+        pin_memory=True,
+        sampler=train_sampler)
+
+# Horovod: use DistributedSampler to partition the valid data.
+valid_sampler = torch.utils.data.distributed.DistributedSampler(
+    valid_dataset, num_replicas=hvd.size(), rank=hvd.rank())
+
 valid_loader = torch.utils.data.DataLoader(
     valid_dataset, batch_size=config['hyperparameters']['batch_size'],
-    shuffle=False, num_workers=config['hyperparameters']['data_worker'],
+    num_workers=num_workers,
     collate_fn=valid_dataset.collate_fn,
-    pin_memory=True)
-
-assert train_dataset
-assert valid_dataset
+    pin_memory=True,
+    sampler=valid_sampler)
 
 # Model
 num_classes = len(target_classes)
@@ -141,12 +167,8 @@ for param in net.parameters():
     for size in sizes:
         num_layer_param *= size
     num_parameters += num_layer_param
-print(net)
+# print(net)
 print("num. of parameters : " + str(num_parameters))
-
-# set data parallel
-if is_data_parallel is True:
-    net = torch.nn.DataParallel(module=net, device_ids=config['cuda']['gpu_id'])
 
 # loss
 criterion = FocalLoss(num_classes=num_classes)
@@ -159,13 +181,16 @@ elif config['hyperparameters']['optimizer'] == 'Adam':
 else:
     raise ValueError('not supported optimizer')
 
-# set lr scheduler
-if config['hyperparameters']['lr_patience'] > 0:
-    scheduler_for_lr = lr_scheduler.ReduceLROnPlateau(optimizer=optimizer, mode='min', factor=0.1,
-                                                      patience=config['hyperparameters']['lr_patience'], verbose=True)
-else:
-    scheduler_for_lr = None
+# Horovod: (optional) compression algorithm.
+compression = hvd.Compression.fp16 if fp16 else hvd.Compression.none
 
+# Horovod: wrap optimizer with DistributedOptimizer.
+optimizer = hvd.DistributedOptimizer(optimizer,
+                                     named_parameters=net.named_parameters(),
+                                     compression=compression,
+                                     op=hvd.Adasum)
+
+# set lr scheduler
 if config['hyperparameters']['lr_multistep'] != 'None':
     milestones = config['hyperparameters']['lr_multistep']
     milestones = milestones.split(', ')
@@ -176,7 +201,7 @@ else:
     scheduler_for_lr = None
 
 # set pre-trained
-if config['model']['model_path'] != 'None':
+if config['model']['model_path'] != 'None' and hvd.rank() == 0:
     print('loading pretrained model from %s' % config['model']['model_path'])
     ckpt = torch.load(config['model']['model_path'], map_location=device)
     weights = utils._load_weights(ckpt['net'])
@@ -187,18 +212,20 @@ if config['model']['model_path'] != 'None':
         best_valid_loss = ckpt['loss']
         global_iter_train = ckpt['global_train_iter']
         global_iter_valid = ckpt['global_valid_iter']
+        # hvd.broadcast_object(start_epoch, root_rank=0)
     else:
         start_epoch = 0
-    optimizer = ckpt['optimizer']
+    # optimizer = ckpt['optimizer']
     # scheduler_for_lr = ckpt['scheduler']
+
+# Horovod: broadcast parameters & optimizer state.
+hvd.broadcast_parameters(net.state_dict(), root_rank=0)
+hvd.broadcast_optimizer_state(optimizer, root_rank=0)
 
 # print out
 print("optimizer : " + str(optimizer))
 if scheduler_for_lr is None:
     print("lr_scheduler : None")
-elif config['hyperparameters']['lr_patience'] > 0:
-    print("lr_scheduler : [patience: " + str(scheduler_for_lr.patience) +
-          ", gamma: " + str(scheduler_for_lr.factor) +"]")
 elif config['hyperparameters']['lr_multistep'] != 'None':
     tmp_str = "lr_scheduler : [milestones: "
     for milestone in scheduler_for_lr.milestones:
@@ -209,6 +236,7 @@ elif config['hyperparameters']['lr_multistep'] != 'None':
     print(tmp_str)
 print("Size of batch : " + str(train_loader.batch_size))
 print("transform : " + str(transform))
+
 if config['data']['add_train'] is not None:
     print("num. train data : ")
     print(concat_train_dataset.dataset_sizes)
@@ -220,15 +248,19 @@ print("classes : " + str(target_classes))
 
 utils.print_config(config)
 
-input("Press any key to continue..")
+# input("Press any key to continue..")
 
 
 # Training
 def train(epoch):
+    # eps=1e-9
     net.train()
     train_loss = 0.
 
     global global_iter_train
+
+    # Horovod: set epoch to sampler for shuffling.
+    train_sampler.set_epoch(epoch)
 
     with torch.set_grad_enabled(True):
         # with autograd.detect_anomaly():
@@ -254,39 +286,39 @@ def train(epoch):
             optimizer.step()
 
             train_loss += loss.item()
-            print('[Train] epoch: %3d | iter: %4d | loc_loss: %.3f | cls_loss: %.3f | mask_loss: %.3f | '
+            print('[Train#%d] epoch: %3d | iter: %4d | loc_loss: %.3f | cls_loss: %.3f | mask_loss: %.3f | '
                   'train_loss: %.3f | avg_loss: %.3f | matched_anchors: %d'
-                  % (epoch, batch_idx, loc_loss.item(), cls_loss.item(), mask_loss.item(),
+                  % (hvd.rank(), epoch, batch_idx, loc_loss.item(), cls_loss.item(), mask_loss.item(),
                      loss.item(), train_loss/(batch_idx+1), num_matched_anchors))
 
-            summary_writer.add_scalar('train/loc_loss', loc_loss.item(), global_iter_train)
-            summary_writer.add_scalar('train/cls_loss', cls_loss.item(), global_iter_train)
-            summary_writer.add_scalar('train/mask_loss', mask_loss.item(), global_iter_train)
-            summary_writer.add_scalar('train/train_loss', loss.item(), global_iter_train)
-            global_iter_train += 1
+            if hvd.rank() == 0:
+                summary_writer.add_scalar('train/loc_loss', loc_loss.item(), global_iter_train)
+                summary_writer.add_scalar('train/cls_loss', cls_loss.item(), global_iter_train)
+                summary_writer.add_scalar('train/mask_loss', mask_loss.item(), global_iter_train)
+                summary_writer.add_scalar('train/train_loss', loss.item(), global_iter_train)
+                global_iter_train += 1
 
-            if config['hyperparameters']['lr_multistep'] != 'None':
-                scheduler_for_lr.step()
+                if config['hyperparameters']['lr_multistep'] != 'None':
+                    scheduler_for_lr.step()
 
-        print('[Train] Saving..')
-        state = {
-            'net': net.state_dict(),
-            'loss': best_valid_loss,
-            'epoch': epoch,
-            'lr': config['hyperparameters']['lr'],
-            'batch': config['hyperparameters']['batch_size'],
-            'anchors': num_anchors,
-            'classes': config['hyperparameters']['classes'],
-            'global_train_iter': global_iter_train,
-            'global_valid_iter': global_iter_valid,
-            'optimizer': optimizer
-        }
-        # torch.save(state, config['model']['exp_path'] + '/ckpt-' + str(epoch) + '.pth')
-        torch.save(state, os.path.join(config['model']['exp_path'], 'latest.pth'))
+        if hvd.rank() == 0:
+            print('[Train] Saving..')
+            state = {
+                'net': net.state_dict(),
+                'epoch': epoch,
+                'lr': config['hyperparameters']['lr'],
+                'anchors': num_anchors,
+                'classes': config['hyperparameters']['classes'],
+                'global_train_iter': global_iter_train,
+                'global_valid_iter': global_iter_valid
+            }
+            # torch.save(state, config['model']['exp_path'] + '/ckpt-' + str(epoch) + '.pth')
+            torch.save(state, os.path.join(config['model']['exp_path'], 'latest.pth'))
 
 
 # Valid
 def valid(epoch):
+    # eps = 1e-9
     net.eval()
     valid_loss = 0.
     avg_valid_loss = 0.
@@ -314,47 +346,47 @@ def valid(epoch):
             loss = ((loc_loss + cls_loss) / num_matched_anchors) + mask_loss
             valid_loss += loss.item()
             avg_valid_loss = valid_loss / (batch_idx + 1)
-            print('[Valid] epoch: %3d | iter: %4d | loc_loss: %.3f | cls_loss: %.3f | mask_loss: %.3f | '
+            print('[Valid#%d] epoch: %3d | iter: %4d | loc_loss: %.3f | cls_loss: %.3f | mask_loss: %.3f | '
                   'valid_loss: %.3f | avg_loss: %.3f | matched_anchors: %d'
-                % (epoch, batch_idx, loc_loss.item(), cls_loss.item(), mask_loss.item(),
+                % (hvd.rank(), epoch, batch_idx, loc_loss.item(), cls_loss.item(), mask_loss.item(),
                    loss.item(), avg_valid_loss, num_matched_anchors))
 
-            summary_writer.add_scalar('valid/loc_loss', loc_loss.item(), global_iter_valid)
-            summary_writer.add_scalar('valid/cls_loss', cls_loss.item(), global_iter_valid)
-            summary_writer.add_scalar('valid/mask_loss', mask_loss.item(), global_iter_valid)
-            summary_writer.add_scalar('valid/valid_loss', loss.item(), global_iter_valid)
-            global_iter_valid += 1
-
-    if config['hyperparameters']['lr_patience'] > 0:
-        scheduler_for_lr.step(avg_valid_loss)
+            if hvd.rank() == 0:
+                summary_writer.add_scalar('valid/loc_loss', loc_loss.item(), global_iter_valid)
+                summary_writer.add_scalar('valid/cls_loss', cls_loss.item(), global_iter_valid)
+                summary_writer.add_scalar('valid/mask_loss', mask_loss.item(), global_iter_valid)
+                summary_writer.add_scalar('valid/valid_loss', loss.item(), global_iter_valid)
+                global_iter_valid += 1
 
     # check whether better model or not
-    if avg_valid_loss < best_valid_loss:
-        best_valid_loss = avg_valid_loss
-        is_saved = True
+    all_avg_valid_loss = hvd.allreduce(torch.tensor(avg_valid_loss), name='all_avg_loss')
 
-    if is_saved is True:
-        print('[Valid] Saving..')
-        state = {
-            'net': net.state_dict(),
-            'loss': best_valid_loss,
-            'epoch': epoch,
-            'lr': config['hyperparameters']['lr'],
-            'batch': config['hyperparameters']['batch_size'],
-            'anchors': num_anchors,
-            'classes': config['hyperparameters']['classes'],
-            'global_train_iter': global_iter_train,
-            'global_valid_iter': global_iter_valid,
-            'optimizer': optimizer
-        }
-        # torch.save(state, config['model']['exp_path'] + '/ckpt-' + str(epoch) + '.pth')
-        torch.save(state, os.path.join(config['model']['exp_path'], 'best.pth'))
+    if hvd.rank() == 0:
+        if all_avg_valid_loss.item() < best_valid_loss:
+            best_valid_loss = all_avg_valid_loss.item()
+            is_saved = True
+
+        if is_saved is True:
+            print('[Valid] Saving..')
+            state = {
+                'net': net.state_dict(),
+                'loss': best_valid_loss,
+                'epoch': epoch,
+                'lr': config['hyperparameters']['lr'],
+                'anchors': num_anchors,
+                'classes': config['hyperparameters']['classes'],
+                'global_train_iter': global_iter_train,
+                'global_valid_iter': global_iter_valid
+            }
+            # torch.save(state, config['model']['exp_path'] + '/ckpt-' + str(epoch) + '.pth')
+            torch.save(state, os.path.join(config['model']['exp_path'], 'best.pth'))
 
 
 if __name__ == '__main__':
-    for epoch in range(start_epoch, config['hyperparameters']['epoch'], 1):
+    for epoch in range(start_epoch, config['hyperparameters']['epoch'] + 1, 1):
         train(epoch)
         valid(epoch)
-    summary_writer.close()
+    if hvd.rank() == 0:
+        summary_writer.close()
 
     print("best valid loss : " + str(best_valid_loss))

@@ -10,11 +10,17 @@ hyperparameters:
   lr_patience: -1
   lr_multistep: None
   random_seed: 3000
-  image_size: 512
+  image_size: 160x160 #rowsxcols
   classes: aeroplane|bicycle|bird|boat|bottle|bus|car|cat|chair|cow|diningtable|dog|horse|motorbike|person|pottedplant|sheep|sofa|train|tvmonitor
   base: Res50
   pre_base: True
   num_crops: -1
+  cls_threshold: 0.05
+  data_worker: 6
+  do_aug: True
+inference:
+  top_k: 1000
+  resized: False
 model:
   model_path: None
   exp_path: expr/pre_ex0

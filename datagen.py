@@ -171,17 +171,14 @@ class jsonDataset(data.Dataset):
         # if self.do_aug is True:
         bbox_params = A.BboxParams(format='pascal_voc', min_area=1, min_visibility=0.3)
         self.augmentation = A.Compose([
-            # A.RGBShift(r_shift_limit=20, g_shift_limit=20, b_shift_limit=20, p=0.5),
-            # A.GaussNoise(p=0.1),
-            # A.GaussianBlur(blur_limit=3, p=0.05),
-            # A.ImageCompression(quality_lower=60, quality_upper=100, p=0.5),
+            A.ImageCompression(quality_lower=60, quality_upper=100, p=0.5),
+            A.GaussNoise(p=0.1),
+            A.HorizontalFlip(p=0.5),
             A.RandomBrightnessContrast(brightness_limit=0.2, contrast_limit=0.2, p=0.5),
             A.HueSaturationValue(hue_shift_limit=20, sat_shift_limit=30, val_shift_limit=0, p=0.5),
-            # A.Normalize(mean=(0.7451, 0.6627, 0.5804), std=(1.0, 1.0, 1.0), p=1.0),
             A.ChannelShuffle(p=1.0),
-            A.ShiftScaleRotate(shift_limit=0.1, scale_limit=(-0.15, 0.15), rotate_limit=45, p=0.5,
-                               border_mode=cv2.BORDER_CONSTANT, value=0),
-            A.HorizontalFlip(p=0.5),
+            A.ShiftScaleRotate(shift_limit=0.1, scale_limit=(-0.25, 0.1), rotate_limit=45, p=1.0,
+                               border_mode=cv2.BORDER_CONSTANT, value=0)
         ], bbox_params=bbox_params, p=1.0)
 
     def __getitem__(self, idx):
@@ -527,6 +524,42 @@ class jsonDataset(data.Dataset):
         return inputs, torch.stack(loc_targets), torch.stack(cls_targets), mask_targets, paths
 
 
+class ConcatBalancedDataset(data.Dataset):
+    r"""Dataset as a concatenation of multiple datasets.
+
+    This class is useful to assemble different existing datasets.
+
+    Arguments:
+        datasets (sequence): List of datasets to be concatenated
+    """
+    @staticmethod
+    def get_sizes(sequence):
+        out_list = list()
+        for seq in sequence:
+            out_list.append(len(seq))
+        return out_list
+
+    def __init__(self, datasets):
+        super(ConcatBalancedDataset, self).__init__()
+        assert len(datasets) > 0, 'datasets should not be an empty iterable'
+        self.datasets = list(datasets)
+        self.dataset_sizes = self.get_sizes(self.datasets)
+        self.num_datasets = len(self.datasets)
+
+    def __len__(self):
+        return min(self.dataset_sizes)
+
+    def __getitem__(self, idx):
+        if idx < 0:
+            if -idx > len(self):
+                raise ValueError("absolute value of index should not exceed dataset length")
+            idx = len(self) + idx
+        dataset_idx = int(idx % self.num_datasets)
+        sample_idx = int(idx / self.num_datasets)
+        sample_idx = sample_idx % self.dataset_sizes[dataset_idx]
+        return self.datasets[dataset_idx][sample_idx]
+
+
 def test():
     import torchvision
 
@@ -546,11 +579,16 @@ def test():
     classes = 'aeroplane|bicycle|bird|boat|bottle|bus|car|cat|chair|cow|diningtable|dog|horse|motorbike|person|pottedplant|sheep|sofa|train|tvmonitor'
     classes = classes.split('|')
 
-    dataset = jsonDataset(path='data/voc.json', classes=classes, transform=transform,
+    dataset1 = jsonDataset(path='data/voc.json', classes=classes, transform=transform,
                           input_image_size=(300, 300), num_crops=1, view_image=True, do_aug=True)
-    print(len(dataset))
+    print(len(dataset1))
+    dataset2 = jsonDataset(path='data/cifar.json', classes=classes, transform=transform,
+                          input_image_size=(150, 150), num_crops=1, view_image=True, do_aug=True)
+    print(len(dataset2))
+
+    dataset = ConcatBalancedDataset([dataset1, dataset2])
     dataloader = torch.utils.data.DataLoader(dataset, batch_size=6, shuffle=False, num_workers=0,
-                                             collate_fn=dataset.collate_fn)
+                                             collate_fn=dataset1.collate_fn)
 
     while True:
         for idx, (images, loc_targets, cls_targets, mask_targets, paths) in enumerate(dataloader):
