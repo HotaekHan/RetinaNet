@@ -92,12 +92,12 @@ valid_dataset = jsonDataset(path=config['data']['valid'].split(' ')[0], classes=
 assert train_dataset
 assert valid_dataset
 
-if config['data']['add_train'] is not None:
+if config['data']['add_train'] != 'None':
     add_train_dataset = jsonDataset(path=config['data']['add_train'].split(' ')[0], classes=target_classes,
-                            transform=transform,
-                            input_image_size=img_size,
-                            num_crops=config['hyperparameters']['num_crops'],
-                            do_aug=config['hyperparameters']['do_aug'])
+                                    transform=transform,
+                                    input_image_size=img_size,
+                                    num_crops=config['hyperparameters']['num_crops'],
+                                    do_aug=config['hyperparameters']['do_aug'])
     concat_train_dataset = ConcatBalancedDataset([train_dataset, add_train_dataset])
     assert add_train_dataset
     assert concat_train_dataset
@@ -189,7 +189,7 @@ if config['model']['model_path'] != 'None':
         global_iter_valid = ckpt['global_valid_iter']
     else:
         start_epoch = 0
-    optimizer = ckpt['optimizer']
+    optimizer.load_state_dict(ckpt['optimizer'])
     # scheduler_for_lr = ckpt['scheduler']
 
 # print out
@@ -209,7 +209,7 @@ elif config['hyperparameters']['lr_multistep'] != 'None':
     print(tmp_str)
 print("Size of batch : " + str(train_loader.batch_size))
 print("transform : " + str(transform))
-if config['data']['add_train'] is not None:
+if config['data']['add_train'] != 'None':
     print("num. train data : ")
     print(concat_train_dataset.dataset_sizes)
 else:
@@ -279,7 +279,7 @@ def train(epoch):
             'classes': config['hyperparameters']['classes'],
             'global_train_iter': global_iter_train,
             'global_valid_iter': global_iter_valid,
-            'optimizer': optimizer
+            'optimizer': optimizer.state_dict()
         }
         # torch.save(state, config['model']['exp_path'] + '/ckpt-' + str(epoch) + '.pth')
         torch.save(state, os.path.join(config['model']['exp_path'], 'latest.pth'))
@@ -345,7 +345,7 @@ def valid(epoch):
             'classes': config['hyperparameters']['classes'],
             'global_train_iter': global_iter_train,
             'global_valid_iter': global_iter_valid,
-            'optimizer': optimizer
+            'optimizer': optimizer.state_dict()
         }
         # torch.save(state, config['model']['exp_path'] + '/ckpt-' + str(epoch) + '.pth')
         torch.save(state, os.path.join(config['model']['exp_path'], 'best.pth'))

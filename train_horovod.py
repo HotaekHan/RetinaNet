@@ -63,11 +63,7 @@ global_iter_valid = 0
 if torch.cuda.is_available() and not config['cuda']['using_cuda']:
     print("WARNING: You have a CUDA device, so you should probably run with using cuda")
 
-if isinstance(config['cuda']['gpu_id'], int):
-    cuda_str = 'cuda:' + str(config['cuda']['gpu_id'])
-else:
-    raise ValueError('Check out gpu id in config')
-
+cuda_str = 'cuda:' + str(hvd.local_rank())
 device = torch.device(cuda_str if config['cuda']['using_cuda'] else "cpu")
 if config['cuda']['using_cuda']:
     # Horovod: pin GPU to local rank.
@@ -105,7 +101,7 @@ valid_dataset = jsonDataset(path=config['data']['valid'].split(' ')[0], classes=
 assert train_dataset
 assert valid_dataset
 
-if config['data']['add_train'] is not None:
+if config['data']['add_train'] != 'None':
     add_train_dataset = jsonDataset(path=config['data']['add_train'].split(' ')[0], classes=target_classes,
                             transform=transform,
                             input_image_size=img_size,
@@ -159,16 +155,17 @@ net = load_model(num_classes=num_classes,
 net = net.to(device)
 
 # print out net
-num_parameters = 0.
-for param in net.parameters():
-    sizes = param.size()
+if hvd.rank() == 0:
+    num_parameters = 0.
+    for param in net.parameters():
+        sizes = param.size()
 
-    num_layer_param = 1.
-    for size in sizes:
-        num_layer_param *= size
-    num_parameters += num_layer_param
-# print(net)
-print("num. of parameters : " + str(num_parameters))
+        num_layer_param = 1.
+        for size in sizes:
+            num_layer_param *= size
+        num_parameters += num_layer_param
+    # print(net)
+    print("num. of parameters : " + str(num_parameters))
 
 # loss
 criterion = FocalLoss(num_classes=num_classes)
@@ -215,7 +212,7 @@ if config['model']['model_path'] != 'None' and hvd.rank() == 0:
         # hvd.broadcast_object(start_epoch, root_rank=0)
     else:
         start_epoch = 0
-    # optimizer = ckpt['optimizer']
+    optimizer = optimizer.load_state_dict(ckpt['optimizer'])
     # scheduler_for_lr = ckpt['scheduler']
 
 # Horovod: broadcast parameters & optimizer state.
@@ -237,7 +234,7 @@ elif config['hyperparameters']['lr_multistep'] != 'None':
 print("Size of batch : " + str(train_loader.batch_size))
 print("transform : " + str(transform))
 
-if config['data']['add_train'] is not None:
+if config['data']['add_train'] != 'None':
     print("num. train data : ")
     print(concat_train_dataset.dataset_sizes)
 else:
@@ -310,7 +307,8 @@ def train(epoch):
                 'anchors': num_anchors,
                 'classes': config['hyperparameters']['classes'],
                 'global_train_iter': global_iter_train,
-                'global_valid_iter': global_iter_valid
+                'global_valid_iter': global_iter_valid,
+                'optimizer': optimizer.state_dict()
             }
             # torch.save(state, config['model']['exp_path'] + '/ckpt-' + str(epoch) + '.pth')
             torch.save(state, os.path.join(config['model']['exp_path'], 'latest.pth'))
@@ -376,7 +374,8 @@ def valid(epoch):
                 'anchors': num_anchors,
                 'classes': config['hyperparameters']['classes'],
                 'global_train_iter': global_iter_train,
-                'global_valid_iter': global_iter_valid
+                'global_valid_iter': global_iter_valid,
+                'optimizer': optimizer.state_dict()
             }
             # torch.save(state, config['model']['exp_path'] + '/ckpt-' + str(epoch) + '.pth')
             torch.save(state, os.path.join(config['model']['exp_path'], 'best.pth'))
