@@ -80,13 +80,15 @@ class Bottleneck_pre_active(nn.Module):
 class Bottleneck(nn.Module):
     expansion = 4
 
-    def __init__(self, in_planes, bottle_planes, stride=1, use_se=False):
+    def __init__(self, in_planes, bottle_planes, stride=1, groups=1, base_width=64, dilation=1, use_se=False):
         super(Bottleneck, self).__init__()
-        self.conv1 = nn.Conv2d(in_planes, bottle_planes, kernel_size=1, bias=False)
-        self.bn1 = nn.BatchNorm2d(bottle_planes)
-        self.conv2 = nn.Conv2d(bottle_planes, bottle_planes, kernel_size=3, stride=stride, padding=1, bias=False)
-        self.bn2 = nn.BatchNorm2d(bottle_planes)
-        self.conv3 = nn.Conv2d(bottle_planes, self.expansion*bottle_planes, kernel_size=1, bias=False)
+        # ResNeXt: aggregated features in residual transformation.
+        width = int(bottle_planes * (base_width / 64.)) * groups
+        self.conv1 = nn.Conv2d(in_planes, width, kernel_size=1, bias=False)
+        self.bn1 = nn.BatchNorm2d(width)
+        self.conv2 = nn.Conv2d(width, width, kernel_size=3, stride=stride, groups=groups, padding=1, bias=False)
+        self.bn2 = nn.BatchNorm2d(width)
+        self.conv3 = nn.Conv2d(width, self.expansion*bottle_planes, kernel_size=1, bias=False)
         self.bn3 = nn.BatchNorm2d(self.expansion*bottle_planes)
         self.relu = nn.ReLU(inplace=True)
 
@@ -117,8 +119,13 @@ class Bottleneck(nn.Module):
 class BasicBlock(nn.Module):
     expansion = 1
 
-    def __init__(self, in_planes, planes, stride=1, use_se=False):
+    def __init__(self, in_planes, planes, stride=1, groups=1, base_width=64, dilation=1, use_se=False):
         super(BasicBlock, self).__init__()
+        if groups != 1 or base_width != 64:
+            raise ValueError('BasicBlock only supports groups=1 and base_width=64')
+        if dilation > 1:
+            raise NotImplementedError("Dilation > 1 not supported in BasicBlock")
+
         self.conv1 = nn.Conv2d(in_planes, planes, kernel_size=3, stride=stride, padding=1, bias=False)
         self.bn1 = nn.BatchNorm2d(planes)
         self.conv2 = nn.Conv2d(planes, planes, kernel_size=3, stride=1, padding=1, bias=False)
@@ -264,9 +271,109 @@ def ResFPN101(is_pretrained = True, use_se=False):
 
     return fpn
 
+def ResFPN152(is_pretrained = True, use_se=False):
+    fpn = ResFPN(Bottleneck, [3, 8, 36, 3], groups=1, width_per_group=64, dilation=1, use_se=use_se)
+
+    if is_pretrained is False:
+        for m in fpn.modules():
+            if isinstance(m, nn.Conv2d):
+                nn.init.normal_(m.weight, mean=0, std=0.01)
+                if m.bias is not None:
+                    nn.init.constant_(m.bias, 0)
+
+    else:
+        print('Loading pretrained ResNet152 model with ImageNet..')
+        state_dict = load_state_dict_from_url(model_urls['resnet152'], progress=True)
+        del state_dict['fc.weight']
+        del state_dict['fc.bias']
+        missing_keys = fpn.load_state_dict(state_dict, strict=False)
+        print(missing_keys)
+
+    return fpn
+
+def ResNextFPN50(is_pretrained = True, use_se=False):
+    fpn = ResFPN(Bottleneck, [3, 4, 6, 3], groups=32, width_per_group=4, dilation=1, use_se=use_se)
+
+    if is_pretrained is False:
+        for m in fpn.modules():
+            if isinstance(m, nn.Conv2d):
+                nn.init.normal_(m.weight, mean=0, std=0.01)
+                if m.bias is not None:
+                    nn.init.constant_(m.bias, 0)
+
+    else:
+        print('Loading pretrained ResNeXt50 model with ImageNet..')
+        state_dict = load_state_dict_from_url(model_urls['resnext50_32x4d'], progress=True)
+        del state_dict['fc.weight']
+        del state_dict['fc.bias']
+        missing_keys = fpn.load_state_dict(state_dict, strict=False)
+        print(missing_keys)
+
+    return fpn
+
+def ResNextFPN101(is_pretrained = True, use_se=False):
+    fpn = ResFPN(Bottleneck, [3, 4, 23, 3], groups=32, width_per_group=8, dilation=1, use_se=use_se)
+
+    if is_pretrained is False:
+        for m in fpn.modules():
+            if isinstance(m, nn.Conv2d):
+                nn.init.normal_(m.weight, mean=0, std=0.01)
+                if m.bias is not None:
+                    nn.init.constant_(m.bias, 0)
+
+    else:
+        print('Loading pretrained ResNeXt101 model with ImageNet..')
+        state_dict = load_state_dict_from_url(model_urls['resnext101_32x8d'], progress=True)
+        del state_dict['fc.weight']
+        del state_dict['fc.bias']
+        missing_keys = fpn.load_state_dict(state_dict, strict=False)
+        print(missing_keys)
+
+    return fpn
+
+def WideResFPN50(is_pretrained = True, use_se=False):
+    fpn = ResFPN(Bottleneck, [3, 4, 6, 3], groups=1, width_per_group=64*2, dilation=1, use_se=use_se)
+
+    if is_pretrained is False:
+        for m in fpn.modules():
+            if isinstance(m, nn.Conv2d):
+                nn.init.normal_(m.weight, mean=0, std=0.01)
+                if m.bias is not None:
+                    nn.init.constant_(m.bias, 0)
+
+    else:
+        print('Loading pretrained WideResNet50 model with ImageNet..')
+        state_dict = load_state_dict_from_url(model_urls['wide_resnet50_2'], progress=True)
+        del state_dict['fc.weight']
+        del state_dict['fc.bias']
+        missing_keys = fpn.load_state_dict(state_dict, strict=False)
+        print(missing_keys)
+
+    return fpn
+
+def WideResFPN101(is_pretrained = True, use_se=False):
+    fpn = ResFPN(Bottleneck, [3, 4, 23, 3], groups=1, width_per_group=64*2, dilation=1, use_se=use_se)
+
+    if is_pretrained is False:
+        for m in fpn.modules():
+            if isinstance(m, nn.Conv2d):
+                nn.init.normal_(m.weight, mean=0, std=0.01)
+                if m.bias is not None:
+                    nn.init.constant_(m.bias, 0)
+
+    else:
+        print('Loading pretrained WideResNet101 model with ImageNet..')
+        state_dict = load_state_dict_from_url(model_urls['wide_resnet50_2'], progress=True)
+        del state_dict['fc.weight']
+        del state_dict['fc.bias']
+        missing_keys = fpn.load_state_dict(state_dict, strict=False)
+        print(missing_keys)
+
+    return fpn
+
 
 def test():
-    net = ResFPN50(is_pretrained=True)
+    net = ResNextFPN50(is_pretrained=True)
 
     num_parameters = 0.
     for param in net.parameters():

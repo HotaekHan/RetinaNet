@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from models.Resnet import ResFPN18, ResFPN50, ResFPN101
+from models.Resnet import ResFPN18, ResFPN50, ResFPN101, ResFPN152, ResNextFPN50, ResNextFPN101
 # from models.Densenet import DenseFPN62, DenseFPN102
 # from models.ShuffleNetV2 import shufflenet_v2_x0_5, shufflenet_v2_x1_0, shufflenet_v2_x1_5, shufflenet_v2_x2_0
 
@@ -31,6 +31,21 @@ class RetinaNet(nn.Module):
                 self.base_networks = ResFPN101(is_pretrained=True, use_se=False)
             else:
                 self.base_networks = ResFPN101(is_pretrained=False, use_se=False)
+        elif basenet == 'Res152':
+            if is_pretrained_base is True:
+                self.base_networks = ResFPN152(is_pretrained=True, use_se=False)
+            else:
+                self.base_networks = ResFPN152(is_pretrained=False, use_se=False)
+        elif basenet == 'ResNeXt50':
+            if is_pretrained_base is True:
+                self.base_networks = ResNextFPN50(is_pretrained=True, use_se=False)
+            else:
+                self.base_networks = ResNextFPN50(is_pretrained=False, use_se=False)
+        elif basenet == 'ResNeXt101':
+            if is_pretrained_base is True:
+                self.base_networks = ResNextFPN101(is_pretrained=True, use_se=False)
+            else:
+                self.base_networks = ResNextFPN101(is_pretrained=False, use_se=False)
         # elif basenet == 'Dense62':
         #     self.base_networks = DenseFPN62(use_se=False, efficient=False)
         # elif basenet == 'Dense102':
