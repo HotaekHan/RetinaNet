@@ -1,7 +1,7 @@
 data:
   train: data/coco_trainval35k.json
   valid: data/coco_minival5k.json
-hyperparameters:
+params:
   batch_size: 12
   optimizer: Adam
   loss: focal
