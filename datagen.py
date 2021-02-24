@@ -197,6 +197,9 @@ class jsonDataset(data.Dataset):
             mask_img = np.uint8(mask * 255.)
             cv2.imwrite(os.path.join("crop_test", str(idx)+"_mask.jpg"), mask_img)
 
+        boxes = torch.tensor(boxes, dtype=torch.float32)
+        labels = torch.tensor(labels, dtype=torch.int64)
+
         return img, boxes, labels, mask, fname
 
     def __len__(self):
