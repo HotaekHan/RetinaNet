@@ -134,7 +134,7 @@ valid_dataset = jsonDataset(path=config['data']['valid'].split(' ')[0], classes=
 assert train_dataset
 assert valid_dataset
 
-if config['data']['add_train'] != 'None':
+if config['data']['add_train'] is not None:
     add_train_dataset = jsonDataset(path=config['data']['add_train'].split(' ')[0], classes=target_classes,
                                     transform=train_transforms,
                                     input_image_size=img_size,
@@ -243,7 +243,7 @@ elif config['params']['lr_multistep'] != 'None':
     print(tmp_str)
 print("Size of batch : " + str(train_loader.batch_size))
 print("transform : " + str(train_transforms))
-if config['data']['add_train'] != 'None':
+if config['data']['add_train'] is not None:
     print("num. train data : ")
     print(concat_train_dataset.dataset_sizes)
 else:
