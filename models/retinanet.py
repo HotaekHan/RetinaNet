@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from models.resnet import ResFPN18, ResFPN50, ResFPN101, ResFPN152, ResNextFPN50, ResNextFPN101
+from models.resnet import ResFPN18, ResFPN50, ResFPN101
 # from models.Densenet import DenseFPN62, DenseFPN102
 # from models.ShuffleNetV2 import shufflenet_v2_x0_5, shufflenet_v2_x1_0, shufflenet_v2_x1_5, shufflenet_v2_x2_0
 
