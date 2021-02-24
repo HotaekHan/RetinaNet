@@ -178,9 +178,9 @@ class jsonDataset(data.Dataset):
         boxes = [list(bbox) for bbox in boxes]
         labels = [bbox.pop() for bbox in boxes]
 
-        mask = torch.zeros(rows, cols, dtype=torch.int64)
-        for box in boxes:
-            mask[int(box[1]):int(box[3]), int(box[0]):int(box[2])] = 1
+        # mask = torch.zeros(rows, cols, dtype=torch.int64)
+        # for box in boxes:
+        #     mask[int(box[1]):int(box[3]), int(box[0]):int(box[2])] = 1
 
         if self.view_img is True:
             np_img = img.numpy()
@@ -194,13 +194,14 @@ class jsonDataset(data.Dataset):
                 cv2.putText(np_img, self.class_idx_map[class_idx], (int(box[0]), int(box[1]) - text_size[1]), cv2.FONT_HERSHEY_PLAIN, 1, (255, 255, 255), 1)
 
             cv2.imwrite(os.path.join("crop_test", str(idx)+".jpg"), np_img)
-            mask_img = np.uint8(mask * 255.)
-            cv2.imwrite(os.path.join("crop_test", str(idx)+"_mask.jpg"), mask_img)
+            # mask_img = np.uint8(mask * 255.)
+            # cv2.imwrite(os.path.join("crop_test", str(idx)+"_mask.jpg"), mask_img)
 
         boxes = torch.tensor(boxes, dtype=torch.float32)
         labels = torch.tensor(labels, dtype=torch.int64)
 
-        return img, boxes, labels, mask, fname
+        # return img, boxes, labels, mask, fname
+        return img, boxes, labels, fname
 
     def __len__(self):
         return self.num_samples
@@ -453,17 +454,17 @@ class jsonDataset(data.Dataset):
         imgs = [x[0] for x in batch]
         boxes = [x[1] for x in batch]
         labels = [x[2] for x in batch]
-        masks = [x[3] for x in batch]
-        paths = [x[4] for x in batch]
+        # masks = [x[3] for x in batch]
+        paths = [x[3] for x in batch]
 
         num_imgs = len(imgs)
 
         if isinstance(self.input_size, int) is True:
             inputs = torch.zeros([num_imgs, 3, self.input_size, self.input_size], dtype=torch.float32)
-            mask_targets = torch.zeros([num_imgs, self.input_size, self.input_size], dtype=torch.int64)
+            # mask_targets = torch.zeros([num_imgs, self.input_size, self.input_size], dtype=torch.int64)
         elif isinstance(self.input_size, tuple) is True:
             inputs = torch.zeros([num_imgs, 3, self.input_size[0], self.input_size[1]], dtype=torch.float32)
-            mask_targets = torch.zeros([num_imgs, self.input_size[0], self.input_size[1]], dtype=torch.int64)
+            # mask_targets = torch.zeros([num_imgs, self.input_size[0], self.input_size[1]], dtype=torch.int64)
         else:
             raise ValueError('input size should be int or tuple of ints')
 
@@ -487,11 +488,11 @@ class jsonDataset(data.Dataset):
             loc_targets.append(loc_target)
             cls_targets.append(cls_target)
 
-            mask = masks[i]
-            mask_targets[i, :imh, :imw] = mask
+            # mask = masks[i]
+            # mask_targets[i, :imh, :imw] = mask
 
-        return inputs, torch.stack(loc_targets), torch.stack(cls_targets), mask_targets, paths
-
+        # return inputs, torch.stack(loc_targets), torch.stack(cls_targets), mask_targets, paths
+        return inputs, torch.stack(loc_targets), torch.stack(cls_targets), paths
 
 class ConcatBalancedDataset(data.Dataset):
     r"""Dataset as a concatenation of multiple datasets.

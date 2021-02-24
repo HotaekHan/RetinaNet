@@ -29,7 +29,8 @@ class FocalLoss(nn.Module):
         loss = F.binary_cross_entropy_with_logits(input=x, target=target, weight=weight, reduction='sum')
         return loss
 
-    def forward(self, loc_preds, loc_targets, cls_preds, cls_targets, mask_preds, mask_targets):
+    # def forward(self, loc_preds, loc_targets, cls_preds, cls_targets, mask_preds, mask_targets):
+    def forward(self, loc_preds, loc_targets, cls_preds, cls_targets):
         batch_size, num_boxes = cls_targets.size()
         pos = cls_targets > 0  # [N,#anchors]
         num_pos = pos.data.long().sum()
@@ -50,6 +51,7 @@ class FocalLoss(nn.Module):
         masked_cls_preds = cls_preds[mask].view(-1, self.num_classes)
         cls_loss = self.focal_loss(masked_cls_preds, cls_targets[pos_neg])
 
-        mask_loss = self.ce_loss(mask_preds, mask_targets)
+        # mask_loss = self.ce_loss(mask_preds, mask_targets)
 
-        return loc_loss, cls_loss, mask_loss, num_pos
+        # return loc_loss, cls_loss, mask_loss, num_pos
+        return loc_loss, cls_loss, num_pos

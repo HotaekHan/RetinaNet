@@ -266,36 +266,49 @@ def train(epoch):
 
     with torch.set_grad_enabled(True):
         # with autograd.detect_anomaly():
-        for batch_idx, (inputs, loc_targets, cls_targets, mask_targets, paths) in enumerate(train_loader):
+        # for batch_idx, (inputs, loc_targets, cls_targets, mask_targets, paths) in enumerate(train_loader):
+        for batch_idx, (inputs, loc_targets, cls_targets, paths) in enumerate(train_loader):
             inputs = inputs.to(device)
             loc_targets = loc_targets.to(device)
             cls_targets = cls_targets.to(device)
-            mask_targets = mask_targets.to(device)
+            # mask_targets = mask_targets.to(device)
 
-            loc_preds, cls_preds, mask_preds = net(inputs)
+            # loc_preds, cls_preds, mask_preds = net(inputs)
+            loc_preds, cls_preds = net(inputs)
 
-            loc_loss, cls_loss, mask_loss, num_matched_anchors = \
-                criterion(loc_preds, loc_targets, cls_preds, cls_targets, mask_preds, mask_targets)
+            # loc_loss, cls_loss, mask_loss, num_matched_anchors = \
+            #     criterion(loc_preds, loc_targets, cls_preds, cls_targets, mask_preds, mask_targets)
+            loc_loss, cls_loss, num_matched_anchors = \
+                criterion(loc_preds, loc_targets, cls_preds, cls_targets)
             if num_matched_anchors == 0:
                 print('No matched anchor')
                 continue
             else:
                 num_matched_anchors = float(num_matched_anchors)
-                loss = ((loc_loss + cls_loss) / num_matched_anchors) + mask_loss
+                # loss = ((loc_loss + cls_loss) / num_matched_anchors) + mask_loss
+                loss = (loc_loss + cls_loss) / num_matched_anchors
 
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
 
             train_loss += loss.item()
-            print('[Train] epoch: %3d | iter: %4d | loc_loss: %.3f | cls_loss: %.3f | mask_loss: %.3f | '
+            # print('[Train] epoch: %3d | iter: %4d | loc_loss: %.3f | cls_loss: %.3f | mask_loss: %.3f | '
+            #       'train_loss: %.3f | avg_loss: %.3f | matched_anchors: %d'
+            #       % (epoch, batch_idx, loc_loss.item(), cls_loss.item(), mask_loss.item(),
+            #          loss.item(), train_loss/(batch_idx+1), num_matched_anchors))
+            #
+            # summary_writer.add_scalar('train/loc_loss', loc_loss.item(), global_iter_train)
+            # summary_writer.add_scalar('train/cls_loss', cls_loss.item(), global_iter_train)
+            # summary_writer.add_scalar('train/mask_loss', mask_loss.item(), global_iter_train)
+            # summary_writer.add_scalar('train/train_loss', loss.item(), global_iter_train)
+            print('[Train] epoch: %3d | iter: %4d | loc_loss: %.3f | cls_loss: %.3f | '
                   'train_loss: %.3f | avg_loss: %.3f | matched_anchors: %d'
-                  % (epoch, batch_idx, loc_loss.item(), cls_loss.item(), mask_loss.item(),
+                  % (epoch, batch_idx, loc_loss.item(), cls_loss.item(),
                      loss.item(), train_loss/(batch_idx+1), num_matched_anchors))
 
             summary_writer.add_scalar('train/loc_loss', loc_loss.item(), global_iter_train)
             summary_writer.add_scalar('train/cls_loss', cls_loss.item(), global_iter_train)
-            summary_writer.add_scalar('train/mask_loss', mask_loss.item(), global_iter_train)
             summary_writer.add_scalar('train/train_loss', loss.item(), global_iter_train)
             global_iter_train += 1
 
@@ -331,31 +344,44 @@ def valid(epoch):
     global global_iter_train
 
     with torch.set_grad_enabled(False):
-        for batch_idx, (inputs, loc_targets, cls_targets, mask_targets, paths) in enumerate(valid_loader):
+        # for batch_idx, (inputs, loc_targets, cls_targets, mask_targets, paths) in enumerate(valid_loader):
+        for batch_idx, (inputs, loc_targets, cls_targets, paths) in enumerate(valid_loader):
             inputs = inputs.to(device)
             loc_targets = loc_targets.to(device)
             cls_targets = cls_targets.to(device)
-            mask_targets = mask_targets.to(device)
+            # mask_targets = mask_targets.to(device)
 
-            loc_preds, cls_preds, mask_preds = net(inputs)
+            # loc_preds, cls_preds, mask_preds = net(inputs)
+            loc_preds, cls_preds = net(inputs)
 
-            loc_loss, cls_loss, mask_loss, num_matched_anchors = \
-                criterion(loc_preds, loc_targets, cls_preds, cls_targets, mask_preds, mask_targets)
+            # loc_loss, cls_loss, mask_loss, num_matched_anchors = \
+            #     criterion(loc_preds, loc_targets, cls_preds, cls_targets, mask_preds, mask_targets)
+            loc_loss, cls_loss, num_matched_anchors = \
+                criterion(loc_preds, loc_targets, cls_preds, cls_targets)
             if num_matched_anchors == 0:
                 print('No matched anchor')
                 continue
             num_matched_anchors = float(num_matched_anchors)
-            loss = ((loc_loss + cls_loss) / num_matched_anchors) + mask_loss
+            # loss = ((loc_loss + cls_loss) / num_matched_anchors) + mask_loss
+            loss = ((loc_loss + cls_loss) / num_matched_anchors)
             valid_loss += loss.item()
             avg_valid_loss = valid_loss / (batch_idx + 1)
-            print('[Valid] epoch: %3d | iter: %4d | loc_loss: %.3f | cls_loss: %.3f | mask_loss: %.3f | '
+            # print('[Valid] epoch: %3d | iter: %4d | loc_loss: %.3f | cls_loss: %.3f | mask_loss: %.3f | '
+            #       'valid_loss: %.3f | avg_loss: %.3f | matched_anchors: %d'
+            #     % (epoch, batch_idx, loc_loss.item(), cls_loss.item(), mask_loss.item(),
+            #        loss.item(), avg_valid_loss, num_matched_anchors))
+            #
+            # summary_writer.add_scalar('valid/loc_loss', loc_loss.item(), global_iter_valid)
+            # summary_writer.add_scalar('valid/cls_loss', cls_loss.item(), global_iter_valid)
+            # summary_writer.add_scalar('valid/mask_loss', mask_loss.item(), global_iter_valid)
+            # summary_writer.add_scalar('valid/valid_loss', loss.item(), global_iter_valid)
+            print('[Valid] epoch: %3d | iter: %4d | loc_loss: %.3f | cls_loss: %.3f | '
                   'valid_loss: %.3f | avg_loss: %.3f | matched_anchors: %d'
-                % (epoch, batch_idx, loc_loss.item(), cls_loss.item(), mask_loss.item(),
+                % (epoch, batch_idx, loc_loss.item(), cls_loss.item(),
                    loss.item(), avg_valid_loss, num_matched_anchors))
 
             summary_writer.add_scalar('valid/loc_loss', loc_loss.item(), global_iter_valid)
             summary_writer.add_scalar('valid/cls_loss', cls_loss.item(), global_iter_valid)
-            summary_writer.add_scalar('valid/mask_loss', mask_loss.item(), global_iter_valid)
             summary_writer.add_scalar('valid/valid_loss', loss.item(), global_iter_valid)
             global_iter_valid += 1
 

@@ -67,14 +67,14 @@ class RetinaNet(nn.Module):
         else:
             raise ValueError('not supported base network.')
 
-        self.conv1_mask = nn.Conv2d(self.base_networks.output_dims, 256, kernel_size=3, padding=2, stride=1,
-                                    dilation=2, bias=False)
-        self.conv1_bn_mask = nn.BatchNorm2d(256)
-        self.deconv_mask = nn.ConvTranspose2d(256, 2, kernel_size=8, padding=2, stride=4, groups=2)
-        self.conv2_mask = nn.Conv2d(2, 2, kernel_size=3, padding=2, stride=1, dilation=2, bias=False)
-        self.conv2_bn_mask = nn.BatchNorm2d(2)
-        self.conv3_mask = nn.Conv2d(2, 2, kernel_size=3, padding=2, stride=1, dilation=2)
-        self.softmax_mask = nn.Softmax2d()
+        # self.conv1_mask = nn.Conv2d(self.base_networks.output_dims, 256, kernel_size=3, padding=2, stride=1,
+        #                             dilation=2, bias=False)
+        # self.conv1_bn_mask = nn.BatchNorm2d(256)
+        # self.deconv_mask = nn.ConvTranspose2d(256, 2, kernel_size=8, padding=2, stride=4, groups=2)
+        # self.conv2_mask = nn.Conv2d(2, 2, kernel_size=3, padding=2, stride=1, dilation=2, bias=False)
+        # self.conv2_bn_mask = nn.BatchNorm2d(2)
+        # self.conv3_mask = nn.Conv2d(2, 2, kernel_size=3, padding=2, stride=1, dilation=2)
+        # self.softmax_mask = nn.Softmax2d()
 
         self.loc_head = self._make_head(self.num_anchors * 4)
         self.cls_head = self._make_head(self.num_anchors * self.num_classes)
@@ -82,23 +82,25 @@ class RetinaNet(nn.Module):
     def forward(self, x):
         p3, p4, p5, p6, p7 = self.base_networks(x)
 
-        mask = F.relu(self.conv1_bn_mask(self.conv1_mask(p3)))
-        mask = self.deconv_mask(mask)
-        mask = F.relu(self.conv2_bn_mask(self.conv2_mask(mask)))
-        mask = self.conv3_mask(mask)
+        # mask = F.relu(self.conv1_bn_mask(self.conv1_mask(p3)))
+        # mask = self.deconv_mask(mask)
+        # mask = F.relu(self.conv2_bn_mask(self.conv2_mask(mask)))
+        # mask = self.conv3_mask(mask)
+        #
+        # attention = self.softmax_mask(mask)
+        # attention = attention[:, 1:2, :, :]
+        # attention = F.avg_pool2d(attention, kernel_size=2, stride=2, ceil_mode=True)
+        #
+        # attention = F.avg_pool2d(attention, kernel_size=2, stride=2, ceil_mode=True)
+        # masked_p3 = attention * p3
+        # attention = F.avg_pool2d(attention, kernel_size=2, stride=2, ceil_mode=True)
+        # masked_p4 = attention * p4
+        # attention = F.avg_pool2d(attention, kernel_size=2, stride=2, ceil_mode=True)
+        # masked_p5 = attention * p5
+        #
+        # fms = [masked_p3, masked_p4, masked_p5, p6, p7]
 
-        attention = self.softmax_mask(mask)
-        attention = attention[:, 1:2, :, :]
-        attention = F.avg_pool2d(attention, kernel_size=2, stride=2, ceil_mode=True)
-
-        attention = F.avg_pool2d(attention, kernel_size=2, stride=2, ceil_mode=True)
-        masked_p3 = attention * p3
-        attention = F.avg_pool2d(attention, kernel_size=2, stride=2, ceil_mode=True)
-        masked_p4 = attention * p4
-        attention = F.avg_pool2d(attention, kernel_size=2, stride=2, ceil_mode=True)
-        masked_p5 = attention * p5
-
-        fms = [masked_p3, masked_p4, masked_p5, p6, p7]
+        fms = [p3, p4, p5, p6, p7]
 
         loc_preds = []
         cls_preds = []
@@ -112,7 +114,9 @@ class RetinaNet(nn.Module):
 
             loc_preds.append(loc_pred)
             cls_preds.append(cls_pred)
-        return torch.cat(loc_preds, 1), torch.cat(cls_preds, 1), mask
+
+        # return torch.cat(loc_preds, 1), torch.cat(cls_preds, 1), mask
+        return torch.cat(loc_preds, 1), torch.cat(cls_preds, 1)
 
     def _make_head(self, out_planes):
         layers = []
@@ -178,16 +182,16 @@ def test():
     print("num. of parameters : " + str(num_parameters))
     print("num. of basenet parameters : " + str(base_num_parameters))
 
-    loc_preds, cls_preds, attention = net(torch.randn(1, 3, 640, 640))
+    loc_preds, cls_preds = net(torch.randn(1, 3, 640, 640))
     print(loc_preds.size())
     print(cls_preds.size())
-    print(attention.size())
+    # print(attention.size())
     loc_grads = torch.randn(loc_preds.size())
     cls_grads = torch.randn(cls_preds.size())
-    att_grads = torch.randn(attention.size())
+    # att_grads = torch.randn(attention.size())
     loc_preds.backward(loc_grads)
     cls_preds.backward(cls_grads)
-    attention.backward(att_grads)
+    # attention.backward(att_grads)
 
 
 if __name__ == '__main__':
