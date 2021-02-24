@@ -185,7 +185,7 @@ class FPN(nn.Module):
         strides = [stride] + [1]*(num_blocks-1)
         layers = []
         for stride in strides:
-            layers.append(block(self.in_planes, bottle_planes, stride, use_se))
+            layers.append(block(self.in_planes, bottle_planes, stride=stride, use_se=use_se))
             self.in_planes = bottle_planes * block.expansion
         return nn.Sequential(*layers)
 
@@ -271,109 +271,109 @@ def ResFPN101(is_pretrained = True, use_se=False):
 
     return fpn
 
-def ResFPN152(is_pretrained = True, use_se=False):
-    fpn = ResFPN(Bottleneck, [3, 8, 36, 3], groups=1, width_per_group=64, dilation=1, use_se=use_se)
-
-    if is_pretrained is False:
-        for m in fpn.modules():
-            if isinstance(m, nn.Conv2d):
-                nn.init.normal_(m.weight, mean=0, std=0.01)
-                if m.bias is not None:
-                    nn.init.constant_(m.bias, 0)
-
-    else:
-        print('Loading pretrained ResNet152 model with ImageNet..')
-        state_dict = load_state_dict_from_url(model_urls['resnet152'], progress=True)
-        del state_dict['fc.weight']
-        del state_dict['fc.bias']
-        missing_keys = fpn.load_state_dict(state_dict, strict=False)
-        print(missing_keys)
-
-    return fpn
-
-def ResNextFPN50(is_pretrained = True, use_se=False):
-    fpn = ResFPN(Bottleneck, [3, 4, 6, 3], groups=32, width_per_group=4, dilation=1, use_se=use_se)
-
-    if is_pretrained is False:
-        for m in fpn.modules():
-            if isinstance(m, nn.Conv2d):
-                nn.init.normal_(m.weight, mean=0, std=0.01)
-                if m.bias is not None:
-                    nn.init.constant_(m.bias, 0)
-
-    else:
-        print('Loading pretrained ResNeXt50 model with ImageNet..')
-        state_dict = load_state_dict_from_url(model_urls['resnext50_32x4d'], progress=True)
-        del state_dict['fc.weight']
-        del state_dict['fc.bias']
-        missing_keys = fpn.load_state_dict(state_dict, strict=False)
-        print(missing_keys)
-
-    return fpn
-
-def ResNextFPN101(is_pretrained = True, use_se=False):
-    fpn = ResFPN(Bottleneck, [3, 4, 23, 3], groups=32, width_per_group=8, dilation=1, use_se=use_se)
-
-    if is_pretrained is False:
-        for m in fpn.modules():
-            if isinstance(m, nn.Conv2d):
-                nn.init.normal_(m.weight, mean=0, std=0.01)
-                if m.bias is not None:
-                    nn.init.constant_(m.bias, 0)
-
-    else:
-        print('Loading pretrained ResNeXt101 model with ImageNet..')
-        state_dict = load_state_dict_from_url(model_urls['resnext101_32x8d'], progress=True)
-        del state_dict['fc.weight']
-        del state_dict['fc.bias']
-        missing_keys = fpn.load_state_dict(state_dict, strict=False)
-        print(missing_keys)
-
-    return fpn
-
-def WideResFPN50(is_pretrained = True, use_se=False):
-    fpn = ResFPN(Bottleneck, [3, 4, 6, 3], groups=1, width_per_group=64*2, dilation=1, use_se=use_se)
-
-    if is_pretrained is False:
-        for m in fpn.modules():
-            if isinstance(m, nn.Conv2d):
-                nn.init.normal_(m.weight, mean=0, std=0.01)
-                if m.bias is not None:
-                    nn.init.constant_(m.bias, 0)
-
-    else:
-        print('Loading pretrained WideResNet50 model with ImageNet..')
-        state_dict = load_state_dict_from_url(model_urls['wide_resnet50_2'], progress=True)
-        del state_dict['fc.weight']
-        del state_dict['fc.bias']
-        missing_keys = fpn.load_state_dict(state_dict, strict=False)
-        print(missing_keys)
-
-    return fpn
-
-def WideResFPN101(is_pretrained = True, use_se=False):
-    fpn = ResFPN(Bottleneck, [3, 4, 23, 3], groups=1, width_per_group=64*2, dilation=1, use_se=use_se)
-
-    if is_pretrained is False:
-        for m in fpn.modules():
-            if isinstance(m, nn.Conv2d):
-                nn.init.normal_(m.weight, mean=0, std=0.01)
-                if m.bias is not None:
-                    nn.init.constant_(m.bias, 0)
-
-    else:
-        print('Loading pretrained WideResNet101 model with ImageNet..')
-        state_dict = load_state_dict_from_url(model_urls['wide_resnet50_2'], progress=True)
-        del state_dict['fc.weight']
-        del state_dict['fc.bias']
-        missing_keys = fpn.load_state_dict(state_dict, strict=False)
-        print(missing_keys)
-
-    return fpn
+# def ResFPN152(is_pretrained = True, use_se=False):
+#     fpn = ResFPN(Bottleneck, [3, 8, 36, 3], groups=1, width_per_group=64, dilation=1, use_se=use_se)
+#
+#     if is_pretrained is False:
+#         for m in fpn.modules():
+#             if isinstance(m, nn.Conv2d):
+#                 nn.init.normal_(m.weight, mean=0, std=0.01)
+#                 if m.bias is not None:
+#                     nn.init.constant_(m.bias, 0)
+#
+#     else:
+#         print('Loading pretrained ResNet152 model with ImageNet..')
+#         state_dict = load_state_dict_from_url(model_urls['resnet152'], progress=True)
+#         del state_dict['fc.weight']
+#         del state_dict['fc.bias']
+#         missing_keys = fpn.load_state_dict(state_dict, strict=False)
+#         print(missing_keys)
+#
+#     return fpn
+#
+# def ResNextFPN50(is_pretrained = True, use_se=False):
+#     fpn = ResFPN(Bottleneck, [3, 4, 6, 3], groups=32, width_per_group=4, dilation=1, use_se=use_se)
+#
+#     if is_pretrained is False:
+#         for m in fpn.modules():
+#             if isinstance(m, nn.Conv2d):
+#                 nn.init.normal_(m.weight, mean=0, std=0.01)
+#                 if m.bias is not None:
+#                     nn.init.constant_(m.bias, 0)
+#
+#     else:
+#         print('Loading pretrained ResNeXt50 model with ImageNet..')
+#         state_dict = load_state_dict_from_url(model_urls['resnext50_32x4d'], progress=True)
+#         del state_dict['fc.weight']
+#         del state_dict['fc.bias']
+#         missing_keys = fpn.load_state_dict(state_dict, strict=False)
+#         print(missing_keys)
+#
+#     return fpn
+#
+# def ResNextFPN101(is_pretrained = True, use_se=False):
+#     fpn = ResFPN(Bottleneck, [3, 4, 23, 3], groups=32, width_per_group=8, dilation=1, use_se=use_se)
+#
+#     if is_pretrained is False:
+#         for m in fpn.modules():
+#             if isinstance(m, nn.Conv2d):
+#                 nn.init.normal_(m.weight, mean=0, std=0.01)
+#                 if m.bias is not None:
+#                     nn.init.constant_(m.bias, 0)
+#
+#     else:
+#         print('Loading pretrained ResNeXt101 model with ImageNet..')
+#         state_dict = load_state_dict_from_url(model_urls['resnext101_32x8d'], progress=True)
+#         del state_dict['fc.weight']
+#         del state_dict['fc.bias']
+#         missing_keys = fpn.load_state_dict(state_dict, strict=False)
+#         print(missing_keys)
+#
+#     return fpn
+#
+# def WideResFPN50(is_pretrained = True, use_se=False):
+#     fpn = ResFPN(Bottleneck, [3, 4, 6, 3], groups=1, width_per_group=64*2, dilation=1, use_se=use_se)
+#
+#     if is_pretrained is False:
+#         for m in fpn.modules():
+#             if isinstance(m, nn.Conv2d):
+#                 nn.init.normal_(m.weight, mean=0, std=0.01)
+#                 if m.bias is not None:
+#                     nn.init.constant_(m.bias, 0)
+#
+#     else:
+#         print('Loading pretrained WideResNet50 model with ImageNet..')
+#         state_dict = load_state_dict_from_url(model_urls['wide_resnet50_2'], progress=True)
+#         del state_dict['fc.weight']
+#         del state_dict['fc.bias']
+#         missing_keys = fpn.load_state_dict(state_dict, strict=False)
+#         print(missing_keys)
+#
+#     return fpn
+#
+# def WideResFPN101(is_pretrained = True, use_se=False):
+#     fpn = ResFPN(Bottleneck, [3, 4, 23, 3], groups=1, width_per_group=64*2, dilation=1, use_se=use_se)
+#
+#     if is_pretrained is False:
+#         for m in fpn.modules():
+#             if isinstance(m, nn.Conv2d):
+#                 nn.init.normal_(m.weight, mean=0, std=0.01)
+#                 if m.bias is not None:
+#                     nn.init.constant_(m.bias, 0)
+#
+#     else:
+#         print('Loading pretrained WideResNet101 model with ImageNet..')
+#         state_dict = load_state_dict_from_url(model_urls['wide_resnet50_2'], progress=True)
+#         del state_dict['fc.weight']
+#         del state_dict['fc.bias']
+#         missing_keys = fpn.load_state_dict(state_dict, strict=False)
+#         print(missing_keys)
+#
+#     return fpn
 
 
 def test():
-    net = ResNextFPN50(is_pretrained=True)
+    net = ResFPN50(is_pretrained=True)
 
     num_parameters = 0.
     for param in net.parameters():
