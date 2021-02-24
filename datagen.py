@@ -22,24 +22,14 @@ from encoder import DataEncoder
 
 
 class jsonDataset(data.Dataset):
-    def __init__(self, path, classes, transform, input_image_size, num_crops, do_aug=False, view_image=False,
+    def __init__(self, path, classes, transform, input_image_size, num_crops, view_image=False,
                  min_cols=1, min_rows=1):
-        '''
-        Args:
-          root: (str) ditectory to images.
-          list_file: (str) path to index file.
-          train: (boolean) train or test.
-          transform: ([transforms]) image transforms.
-          input_size: (int) image shorter side size.
-          max_size: (int) maximum image longer side size.
-        '''
         self.path = path
         self.classes = classes
         self.transform = transform
         self.input_size = input_image_size
         self.num_crops = num_crops
         self.view_img = view_image
-        self.do_aug = do_aug
 
         self.fnames = list()
         self.offsets = list()
@@ -86,22 +76,14 @@ class jsonDataset(data.Dataset):
                 cols = xmax - xmin
 
                 if xmin < 0 or ymin < 0:
-                    if xmin == -1:
-                        xmin = 0
-                    elif ymin == -1:
-                        ymin = 0
-                    else:
-                        print('negative coordinate: [xmin: ' + str(xmin) + ', ymin: ' + str(ymin) + ']')
-                        print(gt_data['image_path'])
+                    print('negative coordinate: [xmin: ' + str(xmin) + ', ymin: ' + str(ymin) + ']')
+                    print(gt_data['image_path'])
+                    continue
 
-                if xmax >= img_cols or ymax >= img_rows:
-                    if xmax == img_cols:
-                        xmax = img_cols - 1
-                    elif ymax == img_rows:
-                        ymax = img_rows -1
-                    else:
-                        print('over maximum size: [xmax: ' + str(xmax) + ', ymax: ' + str(ymax) + ']')
-                        print(gt_data['image_path'])
+                if xmax > img_cols or ymax > img_rows:
+                    print('over maximum size: [xmax: ' + str(xmax) + ', ymax: ' + str(ymax) + ']')
+                    print(gt_data['image_path'])
+                    continue
 
                 if cols < min_cols:
                     print('cols is lower than ' + str(min_cols) + ': [' + str(xmin) + ', ' + str(ymin) + ', ' +
@@ -124,9 +106,9 @@ class jsonDataset(data.Dataset):
                 box.append([float(xmin), float(ymin), float(xmax), float(ymax)])
                 label.append(int(class_idx))
 
-            # if len(box) == 0 or len(label) == 0:
-            #     print('none of object exist in the image: ' + gt_data['image_path'])
-            #     continue
+            if len(box) == 0 or len(label) == 0:
+                print('none of object exist in the image: ' + gt_data['image_path'])
+                continue
 
             all_boxes.append(box)
             all_labels.append(label)
@@ -168,19 +150,6 @@ class jsonDataset(data.Dataset):
 
         self.num_samples = len(self.fnames)
 
-        # if self.do_aug is True:
-        bbox_params = A.BboxParams(format='pascal_voc', min_area=1, min_visibility=0.3)
-        self.augmentation = A.Compose([
-            A.ImageCompression(quality_lower=60, quality_upper=100, p=0.5),
-            A.GaussNoise(p=0.1),
-            A.HorizontalFlip(p=0.5),
-            A.RandomBrightnessContrast(brightness_limit=0.2, contrast_limit=0.2, p=0.5),
-            A.HueSaturationValue(hue_shift_limit=20, sat_shift_limit=30, val_shift_limit=0, p=0.5),
-            A.ChannelShuffle(p=1.0),
-            A.ShiftScaleRotate(shift_limit=0.1, scale_limit=(-0.25, 0.1), rotate_limit=45, p=1.0,
-                               border_mode=cv2.BORDER_CONSTANT, value=0)
-        ], bbox_params=bbox_params, p=1.0)
-
     def __getitem__(self, idx):
         # Load image and boxes.
         fname = self.fnames[idx]
@@ -188,71 +157,68 @@ class jsonDataset(data.Dataset):
         labels = self.labels[idx]
         img = cv2.imread(fname)
 
-        if self.num_crops <= 0:
-            img, boxes = self._resize(img, boxes)
-        else:
+        if self.num_crops > 0:
             offset = self.offsets[idx]
-            crop_rect = (int(offset[0]), int(offset[1]), int(offset[0]+self.input_size[1]), int(offset[1]+self.input_size[0]))
+            crop_rect = (int(offset[0]), int(offset[1]),
+                         int(offset[0]+self.input_size[1]), int(offset[1]+self.input_size[0]))
 
             if offset[0] < 0 or offset[1] < 0:
                 raise ValueError("negative offset!")
-
             for box in boxes:
                 if box[0] < 0 or box[1] < 0 or box[2] > self.input_size[1] or box[3] > self.input_size[0]:
                     raise ValueError("negative box coordinate!")
 
             img = img[crop_rect[1]:crop_rect[3], crop_rect[0]:crop_rect[2]]
 
-        if self.do_aug is True:
-            bboxes = [bbox.tolist() + [label.item()] for bbox, label in zip(boxes, labels)]
-            augmented = self.augmentation(image=img, bboxes=bboxes)
-            img = np.ascontiguousarray(augmented['image'])
-            boxes = augmented['bboxes']
-            boxes = [list(bbox) for bbox in boxes]
-            labels = [bbox.pop() for bbox in boxes]
-            boxes = torch.tensor(boxes, dtype=torch.float32)
-            labels = torch.tensor(labels, dtype=torch.int64)
+        bboxes = [bbox.tolist() + [label.item()] for bbox, label in zip(boxes, labels)]
+        augmented = self.transform(image=img, bboxes=bboxes)
+        img = augmented['image']
+        rows, cols = img.shape[1:]
+        boxes = augmented['bboxes']
+        boxes = [list(bbox) for bbox in boxes]
+        labels = [bbox.pop() for bbox in boxes]
 
-        mask = torch.zeros(img.shape[0], img.shape[1], dtype=torch.int64)
-
+        mask = torch.zeros(rows, cols, dtype=torch.int64)
         for box in boxes:
             mask[int(box[1]):int(box[3]), int(box[0]):int(box[2])] = 1
 
         if self.view_img is True:
+            np_img = img.numpy()
+            np_img = np.transpose(np_img, (1, 2, 0))
+            np_img = np.uint8(np_img * 255)
+            np_img = np.ascontiguousarray(np_img)
             for idx_box, box in enumerate(boxes):
-                cv2.rectangle(img, (int(box[0]), int(box[1])), (int(box[2]), int(box[3])), (0,255,0))
-                class_idx = labels[idx_box].item()
+                cv2.rectangle(np_img, (int(box[0]), int(box[1])), (int(box[2]), int(box[3])), (0, 255, 0))
+                class_idx = labels[idx_box]
                 text_size = cv2.getTextSize(self.class_idx_map[class_idx], cv2.FONT_HERSHEY_PLAIN, 1, 1)
-                cv2.putText(img, self.class_idx_map[class_idx], (int(box[0]), int(box[1]) - text_size[1]), cv2.FONT_HERSHEY_PLAIN, 1, (255, 255, 255), 1)
+                cv2.putText(np_img, self.class_idx_map[class_idx], (int(box[0]), int(box[1]) - text_size[1]), cv2.FONT_HERSHEY_PLAIN, 1, (255, 255, 255), 1)
 
-            cv2.imwrite(os.path.join("crop_test", str(idx)+".jpg"), img)
+            cv2.imwrite(os.path.join("crop_test", str(idx)+".jpg"), np_img)
             mask_img = np.uint8(mask * 255.)
             cv2.imwrite(os.path.join("crop_test", str(idx)+"_mask.jpg"), mask_img)
-
-        img = self.transform(img)
 
         return img, boxes, labels, mask, fname
 
     def __len__(self):
         return self.num_samples
 
-    def _resize(self, img, boxes):
-        if isinstance(self.input_size, int) is True:
-            w = h = self.input_size
-        elif isinstance(self.input_size, tuple) is True:
-            h = self.input_size[0]
-            w = self.input_size[1]
-        else:
-            raise ValueError('input size should be int or tuple of ints')
-
-        ws = 1.0 * w / img.shape[1]
-        hs = 1.0 * h / img.shape[0]
-        scale = torch.tensor([ws, hs, ws, hs], dtype=torch.float32)
-        if boxes.numel() == 0:
-            scaled_box = boxes
-        else:
-            scaled_box = scale * boxes
-        return cv2.resize(img, (w, h)), scaled_box
+    # def _resize(self, img, boxes):
+    #     if isinstance(self.input_size, int) is True:
+    #         w = h = self.input_size
+    #     elif isinstance(self.input_size, tuple) is True:
+    #         h = self.input_size[0]
+    #         w = self.input_size[1]
+    #     else:
+    #         raise ValueError('input size should be int or tuple of ints')
+    #
+    #     ws = 1.0 * w / img.shape[1]
+    #     hs = 1.0 * h / img.shape[0]
+    #     scale = torch.tensor([ws, hs, ws, hs], dtype=torch.float32)
+    #     if boxes.numel() == 0:
+    #         scaled_box = boxes
+    #     else:
+    #         scaled_box = scale * boxes
+    #     return cv2.resize(img, (w, h)), scaled_box
 
     def _do_crop(self, ori_img_rows, ori_img_cols, target_img_size, boxes, labels):
         num_boxes = len(boxes)

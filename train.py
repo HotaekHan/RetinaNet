@@ -14,6 +14,8 @@ from torch import autograd
 
 # 3rd-party utils
 from torch.utils.tensorboard import SummaryWriter
+import albumentations as A
+from albumentations.pytorch import ToTensorV2
 
 # user-defined
 from loss import FocalLoss
@@ -31,7 +33,7 @@ start_epoch = 0  # start from epoch 0 or last epoch
 
 # make output folder
 if not os.path.exists(config['model']['exp_path']):
-    os.mkdir(config['model']['exp_path'])
+    os.makedirs(config['model']['exp_path'], exist_ok=True)
 
 if not os.path.exists(os.path.join(config['model']['exp_path'], 'config.yaml')):
     shutil.copy(opt.config, os.path.join(config['model']['exp_path'], 'config.yaml'))
@@ -69,23 +71,63 @@ device = torch.device(cuda_str if config['cuda']['using_cuda'] else "cpu")
 summary_writer = SummaryWriter(os.path.join(config['model']['exp_path'], 'log'))
 
 # Data
-print('==> Preparing data..')
-transform = transforms.Compose([
-    transforms.ToTensor()
-])
-
-target_classes = config['hyperparameters']['classes'].split('|')
-img_size = config['hyperparameters']['image_size'].split('x')
+target_classes = utils.read_txt(config['params']['classes'])
+num_classes = len(target_classes)
+img_size = config['params']['image_size'].split('x')
 img_size = (int(img_size[0]), int(img_size[1]))
 
+print('==> Preparing data..')
+bbox_params = A.BboxParams(format='pascal_voc', min_visibility=0.3)
+train_transforms = A.Compose([
+    A.Resize(height=img_size[0], width=img_size[1], p=1.0),
+    A.HorizontalFlip(p=0.5),
+    # A.OneOf([
+    #     A.Sequential([
+    #         A.Resize(height=img_size[0], width=img_size[1], p=1.0),
+    #     ], p=1.0),
+    #     A.Sequential([
+    #         A.RandomSizedBBoxSafeCrop(height=img_size[0], width=img_size[1], p=1.0),
+    #     ], p=1.0)
+    # ], p=1.0),
+
+    A.OneOf([
+        A.Sequential([
+            A.GaussNoise(var_limit=(100, 150), p=0.5),
+            A.MotionBlur(blur_limit=17, p=0.5)
+        ], p=1.0),
+        A.Sequential([
+            A.GaussNoise(var_limit=(100, 150), p=0.5),
+            A.MotionBlur(blur_limit=17, p=0.5),
+            A.RandomBrightnessContrast(brightness_limit=0.2, contrast_limit=0.2, p=0.5),
+            A.HueSaturationValue(hue_shift_limit=20, sat_shift_limit=30, val_shift_limit=0, p=0.5),
+        ], p=1.0),
+        A.Sequential([
+            A.GaussNoise(var_limit=(100, 150), p=0.5),
+            A.MotionBlur(blur_limit=17, p=0.5),
+            A.RandomBrightnessContrast(brightness_limit=0.2, contrast_limit=0.2, p=0.5),
+            A.HueSaturationValue(hue_shift_limit=20, sat_shift_limit=30, val_shift_limit=0, p=0.5),
+            A.ChannelShuffle(p=0.5),
+            # A.ShiftScaleRotate(shift_limit=0.1, scale_limit=(-0.15, 0.15), rotate_limit=30, p=0.5,
+            #                    border_mode=cv2.BORDER_CONSTANT, value=0),
+        ], p=1.0)
+    ], p=1.0),
+
+    A.Normalize(mean=(0.485, 0.456, 0.406), std=(0.229, 0.224, 0.225), max_pixel_value=255.0, p=1.0),
+    ToTensorV2()
+], bbox_params=bbox_params, p=1.0)
+valid_transforms = A.Compose([
+    A.Resize(height=img_size[0], width=img_size[1], p=1.0),
+    A.Normalize(mean=(0.485, 0.456, 0.406), std=(0.229, 0.224, 0.225), max_pixel_value=255.0, p=1.0),
+    ToTensorV2()
+], bbox_params=bbox_params, p=1.0)
+
 train_dataset = jsonDataset(path=config['data']['train'].split(' ')[0], classes=target_classes,
-                            transform=transform,
+                            transform=train_transforms,
                             input_image_size=img_size,
-                            num_crops=config['hyperparameters']['num_crops'],
-                            do_aug=config['hyperparameters']['do_aug'])
+                            num_crops=config['hyperparameters']['num_crops'])
 
 valid_dataset = jsonDataset(path=config['data']['valid'].split(' ')[0], classes=target_classes,
-                            transform=transform,
+                            transform=valid_transforms,
                             input_image_size=img_size,
                             num_crops=config['hyperparameters']['num_crops'])
 
@@ -94,10 +136,9 @@ assert valid_dataset
 
 if config['data']['add_train'] != 'None':
     add_train_dataset = jsonDataset(path=config['data']['add_train'].split(' ')[0], classes=target_classes,
-                                    transform=transform,
+                                    transform=train_transforms,
                                     input_image_size=img_size,
-                                    num_crops=config['hyperparameters']['num_crops'],
-                                    do_aug=config['hyperparameters']['do_aug'])
+                                    num_crops=config['hyperparameters']['num_crops'])
     concat_train_dataset = ConcatBalancedDataset([train_dataset, add_train_dataset])
     assert add_train_dataset
     assert concat_train_dataset
@@ -133,16 +174,9 @@ net = load_model(num_classes=num_classes,
 net = net.to(device)
 
 # print out net
-num_parameters = 0.
-for param in net.parameters():
-    sizes = param.size()
-
-    num_layer_param = 1.
-    for size in sizes:
-        num_layer_param *= size
-    num_parameters += num_layer_param
 print(net)
-print("num. of parameters : " + str(num_parameters))
+n_parameters = sum(p.numel() for p in net.parameters() if p.requires_grad)
+print('number of params:', n_parameters)
 
 # set data parallel
 if is_data_parallel is True:
@@ -208,7 +242,7 @@ elif config['hyperparameters']['lr_multistep'] != 'None':
     tmp_str += ']'
     print(tmp_str)
 print("Size of batch : " + str(train_loader.batch_size))
-print("transform : " + str(transform))
+print("transform : " + str(train_transforms))
 if config['data']['add_train'] != 'None':
     print("num. train data : ")
     print(concat_train_dataset.dataset_sizes)

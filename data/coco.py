@@ -5,8 +5,8 @@ import json
 from tqdm import tqdm
 
 is_out = True
-# out_path = 'coco_trainval35k.json'
-out_path = 'coco_minival5k.json'
+out_path = 'coco_trainval35k.json'
+# out_path = 'coco_minival5k.json'
 
 # annFile = '/coco/annotations/instances_valminusminival2014.json'
 annFile = '/coco/annotations/instances_minival2014.json'
@@ -15,7 +15,11 @@ coco_root = '/coco'
 coco = COCO(annFile)
 categories = coco.loadCats(coco.getCatIds())
 class_names = [cat['name'] for cat in categories]
-print('COCO categories: \n{}\n'.format(' '.join(class_names)))
+print('COCO categories: \n{}\n'.format('|'.join(class_names)))
+fout = open('coco_classes.txt', 'w')
+for class_name in class_names:
+    fout.write(f'{class_name}\n')
+fout.close()
 
 img_ids = coco.getImgIds()
 
@@ -33,6 +37,8 @@ for img_id in tqdm(img_ids):
     boxes = list()
     labels = list()
     for ann in anns:
+        if ann['image_id'] != img_id or ann['iscrowd'] != 0:
+            continue
         bbox = ann['bbox']
         xmin = bbox[0]
         ymin = bbox[1]
@@ -40,11 +46,16 @@ for img_id in tqdm(img_ids):
         ymax = ymin + bbox[3]
         class_name = coco.loadCats(ann['category_id'])[0]['name']
 
-        # cv2.rectangle(img, (xmin, ymin), (xmax, ymax), (0, 255, 0))
-        # cv2.putText(img, class_name, (xmin, ymin), cv2.FONT_HERSHEY_PLAIN, 1, [225, 255, 255], 1)
+        # cv2.rectangle(img, (int(xmin), int(ymin)), (int(xmax), int(ymax)), (0, 255, 0))
+        # cv2.putText(img, class_name, (int(xmin), int(ymin)), cv2.FONT_HERSHEY_PLAIN, 1, [225, 255, 255], 1)
+        # cv2.imshow('test', img)
+        # cv2.waitKey(0)
 
         boxes.append([xmin, ymin, xmax, ymax])
         labels.append([class_name])
+
+    if len(boxes) == 0:
+        continue
 
     gt_key = 'img_' + str(img_idx)
     img_idx += 1
