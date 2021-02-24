@@ -42,9 +42,9 @@ else:
     shutil.copy(opt.config, os.path.join(config['model']['exp_path'], 'config.yaml'))
 
 # set random seed
-random.seed(config['hyperparameters']['random_seed'])
-np.random.seed(config['hyperparameters']['random_seed'])
-torch.manual_seed(config['hyperparameters']['random_seed'])
+random.seed(config['params']['random_seed'])
+np.random.seed(config['params']['random_seed'])
+torch.manual_seed(config['params']['random_seed'])
 
 # variables
 best_valid_loss = float('inf')
@@ -124,12 +124,12 @@ valid_transforms = A.Compose([
 train_dataset = jsonDataset(path=config['data']['train'].split(' ')[0], classes=target_classes,
                             transform=train_transforms,
                             input_image_size=img_size,
-                            num_crops=config['hyperparameters']['num_crops'])
+                            num_crops=config['params']['num_crops'])
 
 valid_dataset = jsonDataset(path=config['data']['valid'].split(' ')[0], classes=target_classes,
                             transform=valid_transforms,
                             input_image_size=img_size,
-                            num_crops=config['hyperparameters']['num_crops'])
+                            num_crops=config['params']['num_crops'])
 
 assert train_dataset
 assert valid_dataset
@@ -138,25 +138,25 @@ if config['data']['add_train'] != 'None':
     add_train_dataset = jsonDataset(path=config['data']['add_train'].split(' ')[0], classes=target_classes,
                                     transform=train_transforms,
                                     input_image_size=img_size,
-                                    num_crops=config['hyperparameters']['num_crops'])
+                                    num_crops=config['params']['num_crops'])
     concat_train_dataset = ConcatBalancedDataset([train_dataset, add_train_dataset])
     assert add_train_dataset
     assert concat_train_dataset
 
     train_loader = torch.utils.data.DataLoader(
-        concat_train_dataset, batch_size=config['hyperparameters']['batch_size'],
-        shuffle=True, num_workers=config['hyperparameters']['data_worker'],
+        concat_train_dataset, batch_size=config['params']['batch_size'],
+        shuffle=True, num_workers=config['params']['data_worker'],
         collate_fn=train_dataset.collate_fn,
         pin_memory=True)
 else:
     train_loader = torch.utils.data.DataLoader(
-        train_dataset, batch_size=config['hyperparameters']['batch_size'],
-        shuffle=True, num_workers=config['hyperparameters']['data_worker'],
+        train_dataset, batch_size=config['params']['batch_size'],
+        shuffle=True, num_workers=config['params']['data_worker'],
         collate_fn=train_dataset.collate_fn,
         pin_memory=True)
 valid_loader = torch.utils.data.DataLoader(
-    valid_dataset, batch_size=config['hyperparameters']['batch_size'],
-    shuffle=False, num_workers=config['hyperparameters']['data_worker'],
+    valid_dataset, batch_size=config['params']['batch_size'],
+    shuffle=False, num_workers=config['params']['data_worker'],
     collate_fn=valid_dataset.collate_fn,
     pin_memory=True)
 
@@ -169,8 +169,8 @@ num_anchors = train_dataset.data_encoder.num_anchors
 
 net = load_model(num_classes=num_classes,
                  num_anchors=num_anchors,
-                 basenet=config['hyperparameters']['base'],
-                 is_pretrained_base=config['hyperparameters']['pre_base'])
+                 basenet=config['params']['base'],
+                 is_pretrained_base=config['params']['pre_base'])
 net = net.to(device)
 
 # print out net
@@ -186,22 +186,22 @@ if is_data_parallel is True:
 criterion = FocalLoss(num_classes=num_classes)
 
 # optimizer
-if config['hyperparameters']['optimizer'] == 'SGD':
-    optimizer = optim.SGD(net.parameters(), lr=float(config['hyperparameters']['lr']), momentum=0.9, weight_decay=5e-4)
-elif config['hyperparameters']['optimizer'] == 'Adam':
-    optimizer = optim.Adam(net.parameters(), lr=float(config['hyperparameters']['lr']))
+if config['params']['optimizer'] == 'SGD':
+    optimizer = optim.SGD(net.parameters(), lr=float(config['params']['lr']), momentum=0.9, weight_decay=5e-4)
+elif config['params']['optimizer'] == 'Adam':
+    optimizer = optim.Adam(net.parameters(), lr=float(config['params']['lr']))
 else:
     raise ValueError('not supported optimizer')
 
 # set lr scheduler
-if config['hyperparameters']['lr_patience'] > 0:
+if config['params']['lr_patience'] > 0:
     scheduler_for_lr = lr_scheduler.ReduceLROnPlateau(optimizer=optimizer, mode='min', factor=0.1,
-                                                      patience=config['hyperparameters']['lr_patience'], verbose=True)
+                                                      patience=config['params']['lr_patience'], verbose=True)
 else:
     scheduler_for_lr = None
 
-if config['hyperparameters']['lr_multistep'] != 'None':
-    milestones = config['hyperparameters']['lr_multistep']
+if config['params']['lr_multistep'] != 'None':
+    milestones = config['params']['lr_multistep']
     milestones = milestones.split(', ')
     for iter_milestone in range(len(milestones)):
         milestones[iter_milestone] = int(milestones[iter_milestone])
@@ -230,10 +230,10 @@ if config['model']['model_path'] != 'None':
 print("optimizer : " + str(optimizer))
 if scheduler_for_lr is None:
     print("lr_scheduler : None")
-elif config['hyperparameters']['lr_patience'] > 0:
+elif config['params']['lr_patience'] > 0:
     print("lr_scheduler : [patience: " + str(scheduler_for_lr.patience) +
           ", gamma: " + str(scheduler_for_lr.factor) +"]")
-elif config['hyperparameters']['lr_multistep'] != 'None':
+elif config['params']['lr_multistep'] != 'None':
     tmp_str = "lr_scheduler : [milestones: "
     for milestone in scheduler_for_lr.milestones:
         tmp_str = tmp_str + str(milestone) + ', '
@@ -299,7 +299,7 @@ def train(epoch):
             summary_writer.add_scalar('train/train_loss', loss.item(), global_iter_train)
             global_iter_train += 1
 
-            if config['hyperparameters']['lr_multistep'] != 'None':
+            if config['params']['lr_multistep'] != 'None':
                 scheduler_for_lr.step()
 
         print('[Train] Saving..')
@@ -307,10 +307,10 @@ def train(epoch):
             'net': net.state_dict(),
             'loss': best_valid_loss,
             'epoch': epoch,
-            'lr': config['hyperparameters']['lr'],
-            'batch': config['hyperparameters']['batch_size'],
+            'lr': config['params']['lr'],
+            'batch': config['params']['batch_size'],
             'anchors': num_anchors,
-            'classes': config['hyperparameters']['classes'],
+            'classes': config['params']['classes'],
             'global_train_iter': global_iter_train,
             'global_valid_iter': global_iter_valid,
             'optimizer': optimizer.state_dict()
@@ -359,7 +359,7 @@ def valid(epoch):
             summary_writer.add_scalar('valid/valid_loss', loss.item(), global_iter_valid)
             global_iter_valid += 1
 
-    if config['hyperparameters']['lr_patience'] > 0:
+    if config['params']['lr_patience'] > 0:
         scheduler_for_lr.step(avg_valid_loss)
 
     # check whether better model or not
@@ -373,10 +373,10 @@ def valid(epoch):
             'net': net.state_dict(),
             'loss': best_valid_loss,
             'epoch': epoch,
-            'lr': config['hyperparameters']['lr'],
-            'batch': config['hyperparameters']['batch_size'],
+            'lr': config['params']['lr'],
+            'batch': config['params']['batch_size'],
             'anchors': num_anchors,
-            'classes': config['hyperparameters']['classes'],
+            'classes': config['params']['classes'],
             'global_train_iter': global_iter_train,
             'global_valid_iter': global_iter_valid,
             'optimizer': optimizer.state_dict()
@@ -386,7 +386,7 @@ def valid(epoch):
 
 
 if __name__ == '__main__':
-    for epoch in range(start_epoch, config['hyperparameters']['epoch'], 1):
+    for epoch in range(start_epoch, config['params']['epoch'], 1):
         train(epoch)
         valid(epoch)
     summary_writer.close()

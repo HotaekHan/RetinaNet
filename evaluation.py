@@ -94,7 +94,7 @@ if __name__ == '__main__':
     if opt.mlflow is True:
         mlflow.set_experiment(config['model']['exp_name'])
 
-    target_classes = config['hyperparameters']['classes'].split('|')
+    target_classes = config['params']['classes'].split('|')
     num_classes = len(target_classes)
     class_dict = dict()
     class_idx_dict = dict()
@@ -323,7 +323,7 @@ if __name__ == '__main__':
         # 6. store in mlflow
         if opt.mlflow is True and dataset_name == 'test':
             with mlflow.start_run() as run:
-                mlflow.log_params(config['hyperparameters'])
+                mlflow.log_params(config['params'])
                 mlflow.log_params(config['model'])
                 mlflow.log_params(config['data'])
                 mlflow.log_metric('mAP', mean_AP)

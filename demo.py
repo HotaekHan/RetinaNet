@@ -23,7 +23,7 @@ opt = parser.parse_args()
 
 config = utils.get_config(opt.config)
 
-cls_th = float(config['hyperparameters']['cls_threshold'])
+cls_th = float(config['params']['cls_threshold'])
 nms_th = 0.5
 
 output_dir = os.path.join(config['model']['exp_path'], 'results')
@@ -48,22 +48,22 @@ else:
     is_resized = False
     print('Do not normalize to image size')
 
-if isinstance(config['hyperparameters']['image_size'], str):
-    img_size = config['hyperparameters']['image_size'].split('x')
+if isinstance(config['params']['image_size'], str):
+    img_size = config['params']['image_size'].split('x')
     img_size = (int(img_size[0]), int(img_size[1])) # rows x cols
-    print('Image size: ' + config['hyperparameters']['image_size'])
+    print('Image size: ' + config['params']['image_size'])
 else:
-    print(config['hyperparameters']['image_size'])
+    print(config['params']['image_size'])
     raise ValueError('Check out image size.')
 
-target_classes = config['hyperparameters']['classes'].split('|')
+target_classes = config['params']['classes'].split('|')
 num_classes = len(target_classes)
 
 ckpt = torch.load(os.path.join(config['model']['exp_path'], 'best.pth'), map_location=device)
 
 net = load_model(num_classes=num_classes,
                  num_anchors=ckpt['anchors'],
-                 basenet=config['hyperparameters']['base'],
+                 basenet=config['params']['base'],
                  is_pretrained_base=False)
 net = net.to(device)
 net.eval()

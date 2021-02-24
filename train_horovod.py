@@ -49,9 +49,9 @@ if hvd.rank() == 0:
         shutil.copy(opt.config, os.path.join(config['model']['exp_path'], 'config.yaml'))
 
 # set random seed
-random.seed(config['hyperparameters']['random_seed'])
-np.random.seed(config['hyperparameters']['random_seed'])
-torch.manual_seed(config['hyperparameters']['random_seed'])
+random.seed(config['params']['random_seed'])
+np.random.seed(config['params']['random_seed'])
+torch.manual_seed(config['params']['random_seed'])
 
 # variables
 best_valid_loss = float('inf')
@@ -68,7 +68,7 @@ device = torch.device(cuda_str if config['cuda']['using_cuda'] else "cpu")
 if config['cuda']['using_cuda']:
     # Horovod: pin GPU to local rank.
     torch.cuda.set_device(hvd.local_rank())
-    torch.cuda.manual_seed(config['hyperparameters']['random_seed'])
+    torch.cuda.manual_seed(config['params']['random_seed'])
 
 # Horovod: limit # of CPU threads to be used per worker.
 # torch.set_num_threads(num_workers)
@@ -83,20 +83,20 @@ transform = transforms.Compose([
     transforms.ToTensor()
 ])
 
-target_classes = config['hyperparameters']['classes'].split('|')
-img_size = config['hyperparameters']['image_size'].split('x')
+target_classes = config['params']['classes'].split('|')
+img_size = config['params']['image_size'].split('x')
 img_size = (int(img_size[0]), int(img_size[1]))
 
 train_dataset = jsonDataset(path=config['data']['train'].split(' ')[0], classes=target_classes,
                             transform=transform,
                             input_image_size=img_size,
-                            num_crops=config['hyperparameters']['num_crops'],
-                            do_aug=config['hyperparameters']['do_aug'])
+                            num_crops=config['params']['num_crops'],
+                            do_aug=config['params']['do_aug'])
 
 valid_dataset = jsonDataset(path=config['data']['valid'].split(' ')[0], classes=target_classes,
                             transform=transform,
                             input_image_size=img_size,
-                            num_crops=config['hyperparameters']['num_crops'])
+                            num_crops=config['params']['num_crops'])
 
 assert train_dataset
 assert valid_dataset
@@ -105,8 +105,8 @@ if config['data']['add_train'] != 'None':
     add_train_dataset = jsonDataset(path=config['data']['add_train'].split(' ')[0], classes=target_classes,
                             transform=transform,
                             input_image_size=img_size,
-                            num_crops=config['hyperparameters']['num_crops'],
-                            do_aug=config['hyperparameters']['do_aug'])
+                            num_crops=config['params']['num_crops'],
+                            do_aug=config['params']['do_aug'])
     concat_train_dataset = ConcatBalancedDataset([train_dataset, add_train_dataset])
     assert add_train_dataset
     assert concat_train_dataset
@@ -116,7 +116,7 @@ if config['data']['add_train'] != 'None':
         concat_train_dataset, num_replicas=hvd.size(), rank=hvd.rank())
 
     train_loader = torch.utils.data.DataLoader(
-        concat_train_dataset, batch_size=config['hyperparameters']['batch_size'],
+        concat_train_dataset, batch_size=config['params']['batch_size'],
         num_workers=num_workers,
         collate_fn=train_dataset.collate_fn,
         pin_memory=True,
@@ -127,7 +127,7 @@ else:
         train_dataset, num_replicas=hvd.size(), rank=hvd.rank())
 
     train_loader = torch.utils.data.DataLoader(
-        train_dataset, batch_size=config['hyperparameters']['batch_size'],
+        train_dataset, batch_size=config['params']['batch_size'],
         num_workers=num_workers,
         collate_fn=train_dataset.collate_fn,
         pin_memory=True,
@@ -138,7 +138,7 @@ valid_sampler = torch.utils.data.distributed.DistributedSampler(
     valid_dataset, num_replicas=hvd.size(), rank=hvd.rank())
 
 valid_loader = torch.utils.data.DataLoader(
-    valid_dataset, batch_size=config['hyperparameters']['batch_size'],
+    valid_dataset, batch_size=config['params']['batch_size'],
     num_workers=num_workers,
     collate_fn=valid_dataset.collate_fn,
     pin_memory=True,
@@ -150,8 +150,8 @@ num_anchors = train_dataset.data_encoder.num_anchors
 
 net = load_model(num_classes=num_classes,
                  num_anchors=num_anchors,
-                 basenet=config['hyperparameters']['base'],
-                 is_pretrained_base=config['hyperparameters']['pre_base'])
+                 basenet=config['params']['base'],
+                 is_pretrained_base=config['params']['pre_base'])
 net = net.to(device)
 
 # print out net
@@ -171,10 +171,10 @@ if hvd.rank() == 0:
 criterion = FocalLoss(num_classes=num_classes)
 
 # optimizer
-if config['hyperparameters']['optimizer'] == 'SGD':
-    optimizer = optim.SGD(net.parameters(), lr=float(config['hyperparameters']['lr']), momentum=0.9, weight_decay=5e-4)
-elif config['hyperparameters']['optimizer'] == 'Adam':
-    optimizer = optim.Adam(net.parameters(), lr=float(config['hyperparameters']['lr']))
+if config['params']['optimizer'] == 'SGD':
+    optimizer = optim.SGD(net.parameters(), lr=float(config['params']['lr']), momentum=0.9, weight_decay=5e-4)
+elif config['params']['optimizer'] == 'Adam':
+    optimizer = optim.Adam(net.parameters(), lr=float(config['params']['lr']))
 else:
     raise ValueError('not supported optimizer')
 
@@ -188,8 +188,8 @@ optimizer = hvd.DistributedOptimizer(optimizer,
                                      op=hvd.Adasum)
 
 # set lr scheduler
-if config['hyperparameters']['lr_multistep'] != 'None':
-    milestones = config['hyperparameters']['lr_multistep']
+if config['params']['lr_multistep'] != 'None':
+    milestones = config['params']['lr_multistep']
     milestones = milestones.split(', ')
     for iter_milestone in range(len(milestones)):
         milestones[iter_milestone] = int(milestones[iter_milestone])
@@ -223,7 +223,7 @@ hvd.broadcast_optimizer_state(optimizer, root_rank=0)
 print("optimizer : " + str(optimizer))
 if scheduler_for_lr is None:
     print("lr_scheduler : None")
-elif config['hyperparameters']['lr_multistep'] != 'None':
+elif config['params']['lr_multistep'] != 'None':
     tmp_str = "lr_scheduler : [milestones: "
     for milestone in scheduler_for_lr.milestones:
         tmp_str = tmp_str + str(milestone) + ', '
@@ -295,7 +295,7 @@ def train(epoch):
                 summary_writer.add_scalar('train/train_loss', loss.item(), global_iter_train)
                 global_iter_train += 1
 
-                if config['hyperparameters']['lr_multistep'] != 'None':
+                if config['params']['lr_multistep'] != 'None':
                     scheduler_for_lr.step()
 
         if hvd.rank() == 0:
@@ -303,9 +303,9 @@ def train(epoch):
             state = {
                 'net': net.state_dict(),
                 'epoch': epoch,
-                'lr': config['hyperparameters']['lr'],
+                'lr': config['params']['lr'],
                 'anchors': num_anchors,
-                'classes': config['hyperparameters']['classes'],
+                'classes': config['params']['classes'],
                 'global_train_iter': global_iter_train,
                 'global_valid_iter': global_iter_valid,
                 'optimizer': optimizer.state_dict()
@@ -370,9 +370,9 @@ def valid(epoch):
                 'net': net.state_dict(),
                 'loss': best_valid_loss,
                 'epoch': epoch,
-                'lr': config['hyperparameters']['lr'],
+                'lr': config['params']['lr'],
                 'anchors': num_anchors,
-                'classes': config['hyperparameters']['classes'],
+                'classes': config['params']['classes'],
                 'global_train_iter': global_iter_train,
                 'global_valid_iter': global_iter_valid,
                 'optimizer': optimizer.state_dict()
@@ -382,7 +382,7 @@ def valid(epoch):
 
 
 if __name__ == '__main__':
-    for epoch in range(start_epoch, config['hyperparameters']['epoch'] + 1, 1):
+    for epoch in range(start_epoch, config['params']['epoch'] + 1, 1):
         train(epoch)
         valid(epoch)
     if hvd.rank() == 0:

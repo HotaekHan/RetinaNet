@@ -21,7 +21,7 @@ opt = parser.parse_args()
 
 config = utils.get_config(opt.config)
 
-cls_th = float(config['hyperparameters']['cls_threshold'])
+cls_th = float(config['params']['cls_threshold'])
 nms_th = 0.5
 
 output_dir = os.path.join(config['model']['exp_path'], 'results')
@@ -39,8 +39,8 @@ transform = transforms.Compose([
     transforms.ToTensor()
 ])
 
-target_classes = config['hyperparameters']['classes'].split('|')
-img_size = config['hyperparameters']['image_size'].split('x')
+target_classes = config['params']['classes'].split('|')
+img_size = config['params']['image_size'].split('x')
 img_size = (int(img_size[0]), int(img_size[1]))   # rows x cols
 num_classes = len(target_classes)
 best_ckpt_path = os.path.join(config['model']['exp_path'], 'best.pth')
@@ -49,7 +49,7 @@ ckpt = torch.load(best_ckpt_path, map_location=device)
 
 net = load_model(num_classes=num_classes,
                  num_anchors=ckpt['anchors'],
-                 basenet=config['hyperparameters']['base'],
+                 basenet=config['params']['base'],
                  is_pretrained_base=False)
 net = net.to(device)
 net.eval()
@@ -72,13 +72,13 @@ for dataset_name in dataset_dict:
     num_data = len(dataset)
     assert dataset
     data_loader = torch.utils.data.DataLoader(
-        dataset, batch_size=config['hyperparameters']['batch_size'],
+        dataset, batch_size=config['params']['batch_size'],
         shuffle=False, num_workers=0,
         collate_fn=dataset.collate_fn)
 
     with torch.set_grad_enabled(False):
         for batch_idx, (inputs, loc_targets, cls_targets, mask_targets, paths) in enumerate(data_loader):
-            sys.stdout.write('\r' + str(batch_idx * config['hyperparameters']['batch_size']) + ' / ' + str(num_data))
+            sys.stdout.write('\r' + str(batch_idx * config['params']['batch_size']) + ' / ' + str(num_data))
             inputs = inputs.to(device)
             loc_preds, cls_preds, mask_preds = net(inputs)
             num_batch = loc_preds.shape[0]
