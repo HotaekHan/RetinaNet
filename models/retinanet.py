@@ -2,9 +2,9 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from models.resnet import ResFPN18, ResFPN50, ResFPN101
-# from models.Densenet import DenseFPN62, DenseFPN102
-# from models.ShuffleNetV2 import shufflenet_v2_x0_5, shufflenet_v2_x1_0, shufflenet_v2_x1_5, shufflenet_v2_x2_0
+from models.Resnet import ResFPN18, ResFPN50, ResFPN101, ResFPN152, ResNextFPN50, ResNextFPN101
+from models.Densenet import DenseFPN62, DenseFPN102
+from models.ShuffleNetV2 import shufflenet_v2_x0_5, shufflenet_v2_x1_0, shufflenet_v2_x1_5, shufflenet_v2_x2_0
 
 import math
 
@@ -46,24 +46,24 @@ class RetinaNet(nn.Module):
                 self.base_networks = ResNextFPN101(is_pretrained=True, use_se=False)
             else:
                 self.base_networks = ResNextFPN101(is_pretrained=False, use_se=False)
-        # elif basenet == 'Dense62':
-        #     self.base_networks = DenseFPN62(use_se=False, efficient=False)
-        # elif basenet == 'Dense102':
-        #     self.base_networks = DenseFPN102(use_se=False, efficient=False)
-        # elif basenet == 'ShuffleV2_x0_5':
-        #     if is_pretrained_base is True:
-        #         self.base_networks = shufflenet_v2_x0_5(pretrained=True, progress=True)
-        #     else:
-        #         self.base_networks = shufflenet_v2_x0_5(pretrained=False, progress=True)
-        # elif basenet == 'ShuffleV2_x1_0':
-        #     if is_pretrained_base is True:
-        #         self.base_networks = shufflenet_v2_x1_0(pretrained=True, progress=True)
-        #     else:
-        #         self.base_networks = shufflenet_v2_x1_0(pretrained=False, progress=True)
-        # elif basenet == 'ShuffleV2_x1_5':
-        #     self.base_networks = shufflenet_v2_x1_5(pretrained=False, progress=True)
-        # elif basenet == 'ShuffleV2_x2_0':
-        #     self.base_networks = shufflenet_v2_x2_0(pretrained=False, progress=True)
+        elif basenet == 'Dense62':
+            self.base_networks = DenseFPN62(use_se=False, efficient=False)
+        elif basenet == 'Dense102':
+            self.base_networks = DenseFPN102(use_se=False, efficient=False)
+        elif basenet == 'ShuffleV2_x0_5':
+            if is_pretrained_base is True:
+                self.base_networks = shufflenet_v2_x0_5(pretrained=True, progress=True)
+            else:
+                self.base_networks = shufflenet_v2_x0_5(pretrained=False, progress=True)
+        elif basenet == 'ShuffleV2_x1_0':
+            if is_pretrained_base is True:
+                self.base_networks = shufflenet_v2_x1_0(pretrained=True, progress=True)
+            else:
+                self.base_networks = shufflenet_v2_x1_0(pretrained=False, progress=True)
+        elif basenet == 'ShuffleV2_x1_5':
+            self.base_networks = shufflenet_v2_x1_5(pretrained=False, progress=True)
+        elif basenet == 'ShuffleV2_x2_0':
+            self.base_networks = shufflenet_v2_x2_0(pretrained=False, progress=True)
         else:
             raise ValueError('not supported base network.')
 
@@ -89,7 +89,7 @@ class RetinaNet(nn.Module):
 
         attention = self.softmax_mask(mask)
         attention = attention[:, 1:2, :, :]
-        attention = F.avg_pool2d(attention, kernel_size=4, stride=4, ceil_mode=True)
+        attention = F.avg_pool2d(attention, kernel_size=2, stride=2, ceil_mode=True)
 
         attention = F.avg_pool2d(attention, kernel_size=2, stride=2, ceil_mode=True)
         masked_p3 = attention * p3
@@ -178,7 +178,7 @@ def test():
     print("num. of parameters : " + str(num_parameters))
     print("num. of basenet parameters : " + str(base_num_parameters))
 
-    loc_preds, cls_preds, attention = net(torch.randn(1, 3, 320, 320))
+    loc_preds, cls_preds, attention = net(torch.randn(1, 3, 640, 640))
     print(loc_preds.size())
     print(cls_preds.size())
     print(attention.size())
