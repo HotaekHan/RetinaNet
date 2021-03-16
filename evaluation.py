@@ -6,11 +6,10 @@ from tqdm import tqdm
 import matplotlib.pyplot as plt
 import cv2
 import mlflow
-from retina import utils
+import utils
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--config', type=str, required=True, help='path of ex config')
-parser.add_argument('--model', type=str, required=True, help='model architecture')
 parser.add_argument('--view_result', action='store_true', help='whether see graph or not')
 parser.add_argument('--view_image', action='store_true', help='whether see image or not')
 parser.add_argument('--mlflow', action='store_true', help='store results to mlflow')
@@ -94,7 +93,7 @@ if __name__ == '__main__':
     if opt.mlflow is True:
         mlflow.set_experiment(config['model']['exp_name'])
 
-    target_classes = config['params']['classes'].split('|')
+    target_classes = utils.read_txt(config['params']['classes'])
     num_classes = len(target_classes)
     class_dict = dict()
     class_idx_dict = dict()
@@ -103,6 +102,9 @@ if __name__ == '__main__':
         class_idx_dict[idx] = target_classes[idx]
 
     for dataset_name in target_datasets:
+        if target_datasets[dataset_name] is None:
+            break
+
         if target_datasets[dataset_name].split(' ')[-1] == 'notest':
             continue
         not_exist_class = 0
@@ -115,7 +117,7 @@ if __name__ == '__main__':
         bbox(dict) = keys are box coordinate, class, is_matched
         '''
         print('[' + str(dataset_name) + '] read gt boxes..')
-        fp_read = open(os.path.join(opt.model, target_datasets[dataset_name]), 'r')
+        fp_read = open(target_datasets[dataset_name], 'r')
         gt = json.load(fp_read)
 
         gt_dict = dict()
