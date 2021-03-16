@@ -187,9 +187,10 @@ criterion = FocalLoss(num_classes=num_classes)
 
 # optimizer
 if config['params']['optimizer'] == 'SGD':
-    optimizer = optim.SGD(net.parameters(), lr=float(config['params']['lr']), momentum=0.9, weight_decay=5e-4)
+    optimizer = optim.SGD(filter(lambda p: p.requires_grad, net.parameters()), lr=float(config['params']['lr']),
+                          momentum=0.9, weight_decay=5e-4)
 elif config['params']['optimizer'] == 'Adam':
-    optimizer = optim.Adam(net.parameters(), lr=float(config['params']['lr']))
+    optimizer = optim.Adam(filter(lambda p: p.requires_grad, net.parameters()), lr=float(config['params']['lr']))
 else:
     raise ValueError('not supported optimizer')
 
