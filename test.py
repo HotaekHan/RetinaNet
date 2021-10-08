@@ -64,6 +64,9 @@ weights = utils._load_weights(ckpt['net'])
 missing_keys = net.load_state_dict(weights, strict=True)
 print(missing_keys)
 
+n_params = sum(p.numel() for p in net.parameters() if p.requires_grad)
+print(f'num. of params: {n_params}')
+
 dataset_dict = config['data']
 for dataset_name in dataset_dict:
     data_path = dataset_dict[dataset_name]
@@ -114,11 +117,12 @@ for dataset_name in dataset_dict:
                                                                     cls_threshold=cls_th,
                                                                     top_k=top_k)
 
-                # nms mode = 0: soft-nms(liner), 1: soft-nms(gaussian), 2: hard-nms
-                keep = utils.box_nms(boxes, scores, nms_threshold=nms_th, mode=2)
-                boxes = boxes[keep]
-                scores = scores[keep]
-                labels = labels[keep]
+                if len(boxes) > 0:
+                    # nms mode = 0: soft-nms(liner), 1: soft-nms(gaussian), 2: hard-nms
+                    keep = utils.box_nms(boxes, scores, nms_threshold=nms_th, mode=2)
+                    boxes = boxes[keep]
+                    scores = scores[keep]
+                    labels = labels[keep]
 
                 torch.cuda.synchronize()
                 timer_post.toc()
