@@ -23,7 +23,8 @@ opt = parser.parse_args()
 
 config = utils.get_config(opt.config)
 
-cls_th = float(config['params']['cls_threshold'])
+# cls_th = float(config['params']['cls_threshold'])
+cls_th = 0.5
 nms_th = 0.5
 
 output_dir = os.path.join(config['model']['exp_path'], 'results')
@@ -48,15 +49,15 @@ else:
     is_resized = False
     print('Do not normalize to image size')
 
-if isinstance(config['params']['image_size'], str):
-    img_size = config['params']['image_size'].split('x')
+if isinstance(config['inference']['image_size'], str):
+    img_size = config['inference']['image_size'].split('x')
     img_size = (int(img_size[0]), int(img_size[1])) # rows x cols
-    print('Image size: ' + config['params']['image_size'])
+    print('Image size: ' + config['inference']['image_size'])
 else:
-    print(config['params']['image_size'])
+    print(config['inference']['image_size'])
     raise ValueError('Check out image size.')
 
-target_classes = config['params']['classes'].split('|')
+target_classes = utils.read_txt(config['params']['classes'])
 num_classes = len(target_classes)
 
 ckpt = torch.load(os.path.join(config['model']['exp_path'], 'best.pth'), map_location=device)
@@ -140,7 +141,8 @@ with torch.set_grad_enabled(False):
                     x = x.unsqueeze(0)
                     x = x.to(device)
 
-                    loc_preds, cls_preds, mask_preds = net(x)
+                    # loc_preds, cls_preds, mask_preds = net(x)
+                    loc_preds, cls_preds = net(x)
 
                     boxes, labels, scores = data_encoder.decode(loc_preds=loc_preds.squeeze(),
                                                                 cls_preds=cls_preds.squeeze(),
@@ -178,7 +180,8 @@ with torch.set_grad_enabled(False):
             x = x.unsqueeze(0)
             x = x.to(device)
 
-            loc_preds, cls_preds, mask_preds = net(x)
+            # loc_preds, cls_preds, mask_preds = net(x)
+            loc_preds, cls_preds = net(x)
 
             boxes, labels, scores = data_encoder.decode(loc_preds=loc_preds.squeeze(),
                                                         cls_preds=cls_preds.squeeze(),
@@ -186,11 +189,12 @@ with torch.set_grad_enabled(False):
                                                         cls_threshold=cls_th,
                                                         top_k=config['inference']['top_k'])
 
-        # nms mode = 0: soft-nms(liner), 1: soft-nms(gaussian), 2: hard-nms
-        keep = utils.box_nms(boxes, scores, nms_threshold=nms_th, mode=2)
-        boxes = boxes[keep]
-        scores = scores[keep]
-        labels = labels[keep]
+        if len(boxes) > 0:
+            # nms mode = 0: soft-nms(liner), 1: soft-nms(gaussian), 2: hard-nms
+            keep = utils.box_nms(boxes, scores, nms_threshold=nms_th, mode=2)
+            boxes = boxes[keep]
+            scores = scores[keep]
+            labels = labels[keep]
 
         if is_resized is False:
             utils._write_results(result_dir, img_path, boxes, scores, labels, class_idx_map, (ori_rows, ori_cols))
