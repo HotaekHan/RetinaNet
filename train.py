@@ -134,26 +134,11 @@ valid_dataset = jsonDataset(path=config['data']['valid'].split(' ')[0], classes=
 assert train_dataset
 assert valid_dataset
 
-if config['data']['add_train'] is not None:
-    add_train_dataset = jsonDataset(path=config['data']['add_train'].split(' ')[0], classes=target_classes,
-                                    transform=train_transforms,
-                                    input_image_size=img_size,
-                                    num_crops=config['params']['num_crops'])
-    concat_train_dataset = ConcatBalancedDataset([train_dataset, add_train_dataset])
-    assert add_train_dataset
-    assert concat_train_dataset
-
-    train_loader = torch.utils.data.DataLoader(
-        concat_train_dataset, batch_size=config['params']['batch_size'],
-        shuffle=True, num_workers=config['params']['data_worker'],
-        collate_fn=train_dataset.collate_fn,
-        pin_memory=True)
-else:
-    train_loader = torch.utils.data.DataLoader(
-        train_dataset, batch_size=config['params']['batch_size'],
-        shuffle=True, num_workers=config['params']['data_worker'],
-        collate_fn=train_dataset.collate_fn,
-        pin_memory=True)
+train_loader = torch.utils.data.DataLoader(
+    train_dataset, batch_size=config['params']['batch_size'],
+    shuffle=True, num_workers=config['params']['data_worker'],
+    collate_fn=train_dataset.collate_fn,
+    pin_memory=True)
 valid_loader = torch.utils.data.DataLoader(
     valid_dataset, batch_size=config['params']['batch_size'],
     shuffle=False, num_workers=config['params']['data_worker'],

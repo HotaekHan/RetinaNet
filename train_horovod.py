@@ -145,36 +145,16 @@ valid_dataset = jsonDataset(path=config['data']['valid'].split(' ')[0], classes=
 assert train_dataset
 assert valid_dataset
 
-if config['data']['add_train'] is not None:
-    add_train_dataset = jsonDataset(path=config['data']['add_train'].split(' ')[0], classes=target_classes,
-                                    transform=train_transforms,
-                                    input_image_size=img_size,
-                                    num_crops=config['params']['num_crops'])
-    concat_train_dataset = ConcatBalancedDataset([train_dataset, add_train_dataset])
-    assert add_train_dataset
-    assert concat_train_dataset
+# Horovod: use DistributedSampler to partition the training data.
+train_sampler = torch.utils.data.distributed.DistributedSampler(
+    train_dataset, num_replicas=hvd.size(), rank=hvd.rank())
 
-    # Horovod: use DistributedSampler to partition the training data.
-    train_sampler = torch.utils.data.distributed.DistributedSampler(
-        concat_train_dataset, num_replicas=hvd.size(), rank=hvd.rank())
-
-    train_loader = torch.utils.data.DataLoader(
-        concat_train_dataset, batch_size=config['params']['batch_size'],
-        num_workers=num_workers,
-        collate_fn=train_dataset.collate_fn,
-        pin_memory=True,
-        sampler=train_sampler)
-else:
-    # Horovod: use DistributedSampler to partition the training data.
-    train_sampler = torch.utils.data.distributed.DistributedSampler(
-        train_dataset, num_replicas=hvd.size(), rank=hvd.rank())
-
-    train_loader = torch.utils.data.DataLoader(
-        train_dataset, batch_size=config['params']['batch_size'],
-        num_workers=num_workers,
-        collate_fn=train_dataset.collate_fn,
-        pin_memory=True,
-        sampler=train_sampler)
+train_loader = torch.utils.data.DataLoader(
+    train_dataset, batch_size=config['params']['batch_size'],
+    num_workers=num_workers,
+    collate_fn=train_dataset.collate_fn,
+    pin_memory=True,
+    sampler=train_sampler)
 
 # Horovod: use DistributedSampler to partition the valid data.
 valid_sampler = torch.utils.data.distributed.DistributedSampler(
