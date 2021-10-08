@@ -229,11 +229,7 @@ elif config['params']['lr_multistep'] != 'None':
     print(tmp_str)
 print("Size of batch : " + str(train_loader.batch_size))
 print("transform : " + str(train_transforms))
-if config['data']['add_train'] is not None:
-    print("num. train data : ")
-    print(concat_train_dataset.dataset_sizes)
-else:
-    print("num. train data : " + str(len(train_dataset)))
+print("num. train data : " + str(len(train_dataset)))
 print("num. valid data : " + str(len(valid_dataset)))
 print("num_classes : " + str(num_classes))
 print("classes : " + str(target_classes))
