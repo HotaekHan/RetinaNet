@@ -5,12 +5,31 @@ import json
 from tqdm import tqdm
 
 is_out = True
-out_path = 'coco_trainval35k.json'
-# out_path = 'coco_minival5k.json'
 
-# annFile = '/coco/annotations/instances_valminusminival2014.json'
-annFile = '/coco/annotations/instances_minival2014.json'
-coco_root = '/coco'
+
+''' coco 2014  '''
+# out_path = 'coco_train2014_table.json'
+out_path = 'coco_val2014_table.json'
+''' 2014 minival '''
+# out_path = 'coco_trainval35k_table.json'
+# out_path = 'coco_minival5k_table.json'
+''' coco 2017 '''
+# out_path = 'coco_train2017_table.json'
+# out_path = 'coco_val2017_table.json'
+
+
+''' coco 2014 '''
+# annFile = '/data/data/COCO/annotations_trainval2014/annotations/instances_train2014.json'
+annFile = '/data/data/COCO/annotations_trainval2014/annotations/instances_val2014.json'
+''' 2014 minival '''
+# annFile = '/data/data/COCO/coco_minival2014/instances_valminusminival2014.json'
+# annFile = '/data/data/COCO/coco_minival2014/instances_minival2014.json'
+''' coco 2017 '''
+# annFile = '/data/data/COCO/annotations_trainval2017/annotations/instances_train2017.json'
+# annFile = '/data/data/COCO/annotations_trainval2017/annotations/instances_val2017.json'
+
+
+coco_root = '/data/data/COCO'
 
 coco = COCO(annFile)
 categories = coco.loadCats(coco.getCatIds())
@@ -45,6 +64,11 @@ for img_id in tqdm(img_ids):
         xmax = xmin + bbox[2]
         ymax = ymin + bbox[3]
         class_name = coco.loadCats(ann['category_id'])[0]['name']
+
+
+        ''' 2 interest classes (table and chair) '''
+        if class_name != 'dining table' and class_name != 'chair':
+            continue
 
         # cv2.rectangle(img, (int(xmin), int(ymin)), (int(xmax), int(ymax)), (0, 255, 0))
         # cv2.putText(img, class_name, (int(xmin), int(ymin)), cv2.FONT_HERSHEY_PLAIN, 1, [225, 255, 255], 1)
