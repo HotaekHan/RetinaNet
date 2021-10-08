@@ -127,13 +127,13 @@ class DataEncoder:
         # [x, y, w, h] -> [x1, y1, x2, y2]
         boxes = torch.cat([xy-wh/2, xy+wh/2], 1)  # [#anchors,4]
 
-        if cls_preds.dim() == 1:
+        if cls_preds.dim() == 1:  # only 1 class
             cls_preds = cls_preds.unsqueeze(dim=1)
         scores, labels = cls_preds.sigmoid().max(1)          # [#anchors,]
         ids = scores > cls_threshold
         ids = ids.to(dtype=torch.int8).nonzero().flatten()
 
-        if ids.numel() == 0:
+        if ids.numel() == 0:  # no objects
             return [], [], []
 
         if top_k > 0 and ids.numel() > top_k:
