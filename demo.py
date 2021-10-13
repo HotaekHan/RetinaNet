@@ -11,6 +11,9 @@ from tqdm import tqdm
 import torch
 import torchvision.transforms as transforms
 
+import albumentations as A
+from albumentations.pytorch import ToTensorV2
+
 # user-defined
 from models.retinanet import load_model
 import utils
@@ -31,16 +34,16 @@ output_dir = os.path.join(config['model']['exp_path'], 'results')
 if not os.path.exists(output_dir):
     os.makedirs(output_dir, exist_ok=True)
 
-# cuda
+''' cuda '''
 if torch.cuda.is_available() and not config['cuda']['using_cuda']:
     print("WARNING: You have a CUDA device, so you should probably run with using cuda")
 
 cuda_str = 'cuda:' + str(config['cuda']['gpu_id'])
 device = torch.device(cuda_str if config['cuda']['using_cuda'] else "cpu")
 
-transform = transforms.Compose([
-    transforms.ToTensor()
-])
+''' target class and target image size'''
+target_classes = utils.read_txt(config['params']['classes'])
+num_classes = len(target_classes)
 
 is_resized = True
 if config['inference']['resized'] is True:
@@ -57,10 +60,22 @@ else:
     print(config['inference']['image_size'])
     raise ValueError('Check out image size.')
 
-target_classes = utils.read_txt(config['params']['classes'])
-num_classes = len(target_classes)
+''' get random box color '''
+bbox_colormap = utils._get_rand_bbox_colormap(class_names=target_classes)
 
-ckpt = torch.load(os.path.join(config['model']['exp_path'], 'best.pth'), map_location=device)
+''' transforms '''
+# bbox_params = A.BboxParams(format='pascal_voc', min_visibility=0.3)
+valid_transforms = A.Compose([
+    A.Resize(height=img_size[0], width=img_size[1], p=1.0),
+    A.Normalize(mean=(0.485, 0.456, 0.406), std=(0.229, 0.224, 0.225), max_pixel_value=255.0, p=1.0),
+    ToTensorV2()
+], p=1.0)
+
+
+''' load network'''
+best_ckpt_path = os.path.join(config['model']['exp_path'], 'best.pth')
+print(best_ckpt_path)
+ckpt = torch.load(best_ckpt_path, map_location=device)
 
 net = load_model(num_classes=num_classes,
                  num_anchors=ckpt['anchors'],
@@ -73,6 +88,7 @@ weights = utils._load_weights(ckpt['net'])
 missing_keys = net.load_state_dict(weights, strict=False)
 print(missing_keys)
 
+''' load box encoder and images '''
 data_encoder = DataEncoder()
 
 class_idx_map = dict()
@@ -87,11 +103,13 @@ for (path, _, files) in os.walk(opt.imgs):
         if ext == '.jpg':
             img_paths.append(os.path.join(path, file))
 
+''' make output dir '''
 img_dir_name = os.path.split(opt.imgs)[-1]
 result_dir = os.path.join(config['model']['exp_path'], 'results', img_dir_name)
 if not os.path.exists(result_dir):
     os.makedirs(result_dir, exist_ok=True)
 
+''' do inference'''
 with torch.set_grad_enabled(False):
     for img_path in tqdm(img_paths):
         img = cv2.imread(img_path)
@@ -99,6 +117,7 @@ with torch.set_grad_enabled(False):
         ori_cols = img.shape[1]
 
         # render_img = img
+        ''' no resize the target image'''
         if is_resized is False:
             img_size = (int(ori_rows / 4), int(ori_cols / 4))
 
@@ -137,8 +156,9 @@ with torch.set_grad_enabled(False):
                     # cv2.imshow('test', render_img)
                     # cv2.waitKey(0)
 
-                    x = transform(crop_img)
-                    x = x.unsqueeze(0)
+                    augmented = valid_transforms(image=crop_img)
+                    img = augmented['image']
+                    x = img.unsqueeze(0)
                     x = x.to(device)
 
                     # loc_preds, cls_preds, mask_preds = net(x)
@@ -162,22 +182,20 @@ with torch.set_grad_enabled(False):
                     list_labels.append(labels)
                     list_scores.append(scores)
 
-            boxes = torch.cat(list_boxes, dim=0)
-            labels = torch.cat(list_labels, dim=0)
-            scores = torch.cat(list_scores, dim=0)
-
-            if config['inference']['top_k'] > 0 and scores.numel() > config['inference']['top_k']:
-                _, top_ids = torch.topk(scores, k=config['inference']['top_k'])
+            if len(list_boxes) > 0:
+                boxes = torch.cat(list_boxes, dim=0)
+                labels = torch.cat(list_labels, dim=0)
+                scores = torch.cat(list_scores, dim=0)
             else:
-                top_ids = torch.arange(0, scores.numel(), 1, dtype=torch.int64, device=scores.device)
-
-            boxes = boxes[top_ids]
-            scores = scores[top_ids]
-            labels = labels[top_ids]
+                boxes = list()
+                labels = list()
+                scores = list()
         else:
+            ''' resize the target image '''
             resized_img = cv2.resize(img, (img_size[1], img_size[0]))
-            x = transform(resized_img)
-            x = x.unsqueeze(0)
+            augmented = valid_transforms(image=resized_img)
+            img = augmented['image']
+            x = img.unsqueeze(0)
             x = x.to(device)
 
             # loc_preds, cls_preds, mask_preds = net(x)
@@ -189,6 +207,7 @@ with torch.set_grad_enabled(False):
                                                         cls_threshold=cls_th,
                                                         top_k=config['inference']['top_k'])
 
+        ''' do nms '''
         if len(boxes) > 0:
             # nms mode = 0: soft-nms(liner), 1: soft-nms(gaussian), 2: hard-nms
             keep = utils.box_nms(boxes, scores, nms_threshold=nms_th, mode=2)
@@ -196,9 +215,24 @@ with torch.set_grad_enabled(False):
             scores = scores[keep]
             labels = labels[keep]
 
+        ''' write output file'''
         if is_resized is False:
-            utils._write_results(result_dir, img_path, boxes, scores, labels, class_idx_map, (ori_rows, ori_cols))
+            utils._write_results(dir_path=result_dir,
+                                 img_path=img_path,
+                                 boxes=boxes,
+                                 scores=scores,
+                                 labels=labels,
+                                 class_idx_map=class_idx_map,
+                                 input_size=(ori_rows, ori_cols),
+                                 bbox_colormap=bbox_colormap)
         else:
-            utils._write_results(result_dir, img_path, boxes, scores, labels, class_idx_map, img_size)
+            utils._write_results(dir_path=result_dir,
+                                 img_path=img_path,
+                                 boxes=boxes,
+                                 scores=scores,
+                                 labels=labels,
+                                 class_idx_map=class_idx_map,
+                                 input_size=img_size,
+                                 bbox_colormap=bbox_colormap)
 
 

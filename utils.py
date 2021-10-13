@@ -5,6 +5,7 @@ import yaml
 import os
 import collections
 import cv2
+import numpy as np
 
 
 def meshgrid(x, y, row_major=True):
@@ -284,25 +285,45 @@ def _load_weights(weights_dict):
 
     return new_weights
 
-def _get_box_color(class_name):
-    # TODO: create color code
-    box_color = (10, 180, 10)
-    return box_color
+def _get_rand_bbox_colormap(class_names):
+    color_dict = dict()
+    for class_name in class_names:
+        np_rand_vals = np.random.choice(range(256), size=3)
+        rand_color = (int(np_rand_vals[0]), int(np_rand_vals[1]), int(np_rand_vals[2]))
+        color_dict[class_name] = rand_color
+
+    return color_dict
+
+def _get_box_color(class_name, rand_colormap):
+    return rand_colormap[class_name]
 
 
 def _get_class_name(class_idx, class_idx_map):
     return class_idx_map[class_idx]
 
 
-def _draw_rects(img, boxes, scores, labels, class_idx_map, ws, hs):
+def _draw_rects(img, boxes, scores, labels, class_idx_map, ws, hs, bbox_colormap):
     for box_idx, box in enumerate(boxes):
+        for iter_idx in range(len(box)):
+            if box[iter_idx] < 0:
+                box[iter_idx] = 0
+        ''' get box '''
         pt1 = (int(box[0] * ws), int(box[1] * hs))
         pt2 = (int(box[2] * ws), int(box[3] * hs))
         class_name = _get_class_name(labels[box_idx]+1, class_idx_map)
         score = float(scores[box_idx])
         out_text = class_name + ':' + format(score, ".2f")
-        box_color = _get_box_color(class_name)
+        box_color = _get_box_color(class_name, bbox_colormap)
+
+        ''' draw rect '''
+        roi_img = img[pt1[1]:pt2[1], pt1[0]:pt2[0]]
+        fill_rect = np.ones(roi_img.shape) * box_color
+        fill_rect = fill_rect.astype(np.uint8)
+        trans_rect = cv2.addWeighted(roi_img, 0.5, fill_rect, 0.5, 0)
+        img[pt1[1]:pt2[1], pt1[0]:pt2[0]] = trans_rect
         cv2.rectangle(img, pt1, pt2, box_color, 1)
+
+        ''' write font '''
         t_size = cv2.getTextSize(out_text, cv2.FONT_HERSHEY_PLAIN, 1, 1)[0]
         pt2 = pt1[0] + (t_size[0] + 3), pt1[1] - (t_size[1] + 4)
         cv2.rectangle(img, pt1, pt2, box_color, -1)
@@ -325,7 +346,7 @@ def _write_txt(out_path, boxes, scores, labels, class_idx_map, ws, hs):
     f_out.close()
 
 
-def _write_results(dir_path, img_path, boxes, scores, labels, class_idx_map, input_size):
+def _write_results(dir_path, img_path, boxes, scores, labels, class_idx_map, input_size, bbox_colormap):
     if not isinstance(boxes, list):
         boxes = boxes.tolist()
         scores = scores.tolist()
@@ -342,7 +363,8 @@ def _write_results(dir_path, img_path, boxes, scores, labels, class_idx_map, inp
     ori_cols = img.shape[1]
     ws = ori_cols / resized_cols
     hs = ori_rows / resized_rows
-    _draw_rects(img, boxes=boxes, scores=scores, labels=labels, class_idx_map=class_idx_map, ws=ws, hs=hs)
+    _draw_rects(img, boxes=boxes, scores=scores, labels=labels, class_idx_map=class_idx_map, ws=ws, hs=hs,
+                bbox_colormap=bbox_colormap)
 
     img_out = os.path.join(dir_path, image_name + image_ext)
     cv2.imwrite(img_out, img)
