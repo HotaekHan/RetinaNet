@@ -168,7 +168,6 @@ valid_loader = torch.utils.data.DataLoader(
     sampler=valid_sampler)
 
 # Model
-num_classes = len(target_classes)
 num_anchors = train_dataset.data_encoder.num_anchors
 
 net = load_model(num_classes=num_classes,
