@@ -45,6 +45,7 @@ def download(url, dir='.', unzip=True, delete=True, curl=False, threads=1):
             download_one(u, dir)
 
 # Make Directories
+# 아래 경로를 수정해주세요.
 dir = Path('/data/data/Object365')  # dataset root dir
 for p in 'images', 'labels':
   (dir / p).mkdir(parents=True, exist_ok=True)
