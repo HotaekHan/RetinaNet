@@ -49,6 +49,9 @@ valid_transforms = A.Compose([
     ToTensorV2()
 ], bbox_params=bbox_params, p=1.0)
 
+''' get random box color '''
+bbox_colormap = utils._get_rand_bbox_colormap(class_names=target_classes)
+
 best_ckpt_path = os.path.join(config['model']['exp_path'], 'best.pth')
 print(best_ckpt_path)
 ckpt = torch.load(best_ckpt_path, map_location=device)
@@ -128,7 +131,7 @@ for dataset_name in dataset_dict:
                 timer_post.toc()
 
                 utils._write_results(result_dir, paths[iter_batch], boxes, scores, labels, dataset.class_idx_map,
-                                     img_size)
+                                     img_size, bbox_colormap)
     print()
     print(f'device: {device}')
     print(f'mean. elapsed time(inference): {timer_infer.average_time * 1000.:.4f}')
